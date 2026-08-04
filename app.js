@@ -16,7 +16,7 @@ let state = {
   todos: [],
   watchItems: [],
   editing: null,       // { type, id }
-  pendingDeadline: null, // ISO date string for the input bar deadline
+  searchQuery: '',
 };
 
 let newItemIds = new Set();
@@ -44,11 +44,24 @@ function isoToday() {
     String(d.getDate()).padStart(2,'0');
 }
 
-/** Human-friendly deadline label */
+/** Parse ISO date as local midnight */
+function parseLocalDate(iso) {
+  return new Date(iso + 'T00:00:00');
+}
+
+/** Human-friendly date label */
 function dateLabel(iso) {
   if (!iso) return '';
-  const d = new Date(iso + 'T00:00:00');
+  const d = parseLocalDate(iso);
   return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+/** Date range label */
+function dateRangeLabel(startIso, endIso) {
+  if (!startIso && !endIso) return '';
+  if (!startIso || startIso === endIso) return dateLabel(endIso);
+  if (!endIso) return dateLabel(startIso);
+  return `${dateLabel(startIso)} - ${dateLabel(endIso)}`;
 }
 
 /** Is a deadline ISO date in the past? */
@@ -56,9 +69,24 @@ function isOverdue(iso) {
   return iso && iso < isoToday();
 }
 
-/** Is a deadline ISO date today? */
+/** Is an ISO date today? */
 function isToday(iso) {
   return iso === isoToday();
+}
+
+/** Is today within [start, end]? */
+function isActiveToday(startIso, endIso) {
+  const today = isoToday();
+  if (startIso && endIso) return today >= startIso && today <= endIso;
+  if (endIso) return today <= endIso && today >= endIso;
+  return false;
+}
+
+/** Day diff between two ISO dates */
+function dayDiff(startIso, endIso) {
+  const start = parseLocalDate(startIso).getTime();
+  const end = parseLocalDate(endIso).getTime();
+  return Math.round((end - start) / 86400000);
 }
 
 /* ========== Persistence ========== */
@@ -74,6 +102,7 @@ function saveState() {
 
 function migrateItem(item) {
   if (item.deadline === undefined) item.deadline = null;
+  if (item.startDate === undefined) item.startDate = item.deadline;
   if (item.note === undefined) item.note = '';
   return item;
 }
@@ -88,10 +117,12 @@ function loadState() {
       state.currentCategory = data.currentCategory || 'drama';
     } else {
       const today = isoToday();
+      const tomorrow = addDays(today, 1);
+      const nextWeek = addDays(today, 5);
       state.todos = [
-        { id: uid(), title: '欢迎来到 🍑todo！', isCompleted: false, isPinned: false, order: 0, createdAt: Date.now(), deadline: null, note: '' },
-        { id: uid(), title: '点击左侧圆圈完成任务', isCompleted: false, isPinned: false, order: 1, createdAt: Date.now(), deadline: null, note: '' },
-        { id: uid(), title: '试试添加截止时间 ⏰', isCompleted: false, isPinned: false, order: 2, createdAt: Date.now(), deadline: today, note: '' },
+        { id: uid(), title: '欢迎来到 🍑todo！', isCompleted: false, isPinned: false, order: 0, createdAt: Date.now(), startDate: today, deadline: today, note: '' },
+        { id: uid(), title: '点击左侧圆圈完成任务', isCompleted: false, isPinned: false, order: 1, createdAt: Date.now(), startDate: today, deadline: tomorrow, note: '' },
+        { id: uid(), title: '试试添加起止时间 ⏰', isCompleted: false, isPinned: false, order: 2, createdAt: Date.now(), startDate: today, deadline: nextWeek, note: '' },
       ];
       state.watchItems = [
         { id: uid(), title: '茶馆', category: 'drama', note: '北京人艺', isCompleted: false, isPinned: true, order: 0, createdAt: Date.now() },
@@ -104,8 +135,14 @@ function loadState() {
   } catch (e) { console.error('loadState:', e); }
 }
 
+function addDays(iso, n) {
+  const d = parseLocalDate(iso);
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 /* ========== Todo Operations ========== */
-function addTodo(title, deadline) {
+function addTodo(title, startDate, deadline) {
   const t = title.trim();
   if (!t) return;
   const todo = {
@@ -115,7 +152,8 @@ function addTodo(title, deadline) {
     isPinned: false,
     order: 0,
     createdAt: Date.now(),
-    deadline: deadline || null,
+    startDate: startDate || deadline || null,
+    deadline: deadline || startDate || null,
     note: '',
   };
   const incomplete = state.todos.filter(x => !x.isCompleted);
@@ -125,9 +163,7 @@ function addTodo(title, deadline) {
   state.todos = [...incomplete, ...completed];
   newItemIds.add(todo.id);
   saveState();
-  renderTodoList();
-  updateProgress();
-  renderGantt();
+  renderWorkspace();
 }
 
 function toggleTodo(id) {
@@ -136,17 +172,13 @@ function toggleTodo(id) {
   todo.isCompleted = !todo.isCompleted;
   resortTodos();
   saveState();
-  renderTodoList();
-  updateProgress();
-  renderGantt();
+  renderWorkspace();
 }
 
 function deleteTodo(id) {
   state.todos = state.todos.filter(x => x.id !== id);
   saveState();
-  renderTodoList();
-  updateProgress();
-  renderGantt();
+  renderWorkspace();
 }
 
 function togglePinTodo(id) {
@@ -155,21 +187,20 @@ function togglePinTodo(id) {
   todo.isPinned = !todo.isPinned;
   resortTodos();
   saveState();
-  renderTodoList();
+  renderWorkspace();
 }
 
-function editTodo(id, title, note, deadline) {
+function editTodo(id, title, note, startDate, deadline) {
   const todo = state.todos.find(x => x.id === id);
   if (!todo) return;
   const t = title.trim();
   if (!t) { deleteTodo(id); return; }
   todo.title = t;
   todo.note = note || '';
-  todo.deadline = deadline || null;
+  todo.startDate = startDate || deadline || null;
+  todo.deadline = deadline || startDate || null;
   saveState();
-  renderTodoList();
-  updateProgress();
-  renderGantt();
+  renderWorkspace();
 }
 
 function resortTodos() {
@@ -187,7 +218,7 @@ function reorderTodos(fromId, toId) {
   const [moved] = state.todos.splice(fromIdx, 1);
   state.todos.splice(toIdx, 0, moved);
   saveState();
-  renderTodoList();
+  renderWorkspace();
 }
 
 /* ========== Watch Operations ========== */
@@ -274,13 +305,82 @@ function reorderWatch(fromId, toId) {
   renderWatchList();
 }
 
-/* ========== Rendering: Progress ========== */
+/* ========== Workspace Rendering ========== */
+function renderWorkspace() {
+  updateProgress();
+  renderGantt();
+  renderTodayTasks();
+  renderUpcomingTasks();
+  renderCompletedTasks();
+}
+
+function filterBySearch(todos) {
+  if (!state.searchQuery) return todos;
+  const q = state.searchQuery.toLowerCase();
+  return todos.filter(t => t.title.toLowerCase().includes(q) || (t.note && t.note.toLowerCase().includes(q)));
+}
+
+function getTodayTasks() {
+  const today = isoToday();
+  return state.todos.filter(t => !t.isCompleted && (
+    t.deadline === today ||
+    (t.startDate && t.deadline && today >= t.startDate && today <= t.deadline)
+  ));
+}
+
+function getUpcomingTasks() {
+  const today = isoToday();
+  return state.todos.filter(t => !t.isCompleted && (
+    (t.deadline && t.deadline > today && (t.startDate === null || t.startDate > today)) ||
+    (t.startDate && t.startDate > today)
+  ));
+}
+
+function getCompletedTasks() {
+  return state.todos.filter(t => t.isCompleted);
+}
+
+function renderTodayTasks() {
+  const list = document.getElementById('today-list');
+  const tasks = filterBySearch(getTodayTasks());
+  document.getElementById('today-count').textContent = tasks.length;
+  renderCardList(list, tasks, 'todo', 'today');
+}
+
+function renderUpcomingTasks() {
+  const list = document.getElementById('upcoming-list');
+  const tasks = filterBySearch(getUpcomingTasks());
+  document.getElementById('upcoming-count').textContent = tasks.length;
+  renderCardList(list, tasks, 'todo', 'upcoming');
+}
+
+function renderCompletedTasks() {
+  const list = document.getElementById('completed-list');
+  const tasks = filterBySearch(getCompletedTasks());
+  document.getElementById('completed-count').textContent = tasks.length;
+  renderCardList(list, tasks, 'todo', 'completed');
+}
+
+function renderCardList(container, items, type, section) {
+  container.innerHTML = '';
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    const emojiMap = { today: '📋', upcoming: '🚀', completed: '✨' };
+    const textMap = { today: '今天暂无任务', upcoming: '暂无 upcoming 任务', completed: '还没有已完成任务' };
+    empty.innerHTML = `<div class="empty-emoji">${emojiMap[section] || '🍑'}</div><div class="empty-text">${textMap[section] || '还没有任务'}</div>`;
+    container.appendChild(empty);
+    return;
+  }
+  items.forEach(item => container.appendChild(createItemCard(item, type)));
+}
+
+/* ========== Progress ========== */
 function updateProgress() {
   const total = state.todos.length;
   const done = state.todos.filter(x => x.isCompleted).length;
   const pct = total > 0 ? Math.round((done/total)*100) : 0;
   document.getElementById('todo-progress-fill').style.width = pct + '%';
-  document.getElementById('todo-stats-text').textContent = `${done} / ${total} 已完成`;
   document.getElementById('todo-stats-percent').textContent = pct + '%';
 }
 
@@ -298,7 +398,6 @@ function updateWatchProgress() {
 function renderGantt() {
   const container = document.getElementById('gantt-chart');
   const rangeEl = document.getElementById('gantt-range');
-  const section = document.getElementById('gantt-section');
 
   // 7-day range starting today
   const today = new Date();
@@ -313,25 +412,25 @@ function renderGantt() {
   const fmtMD = d => `${d.getMonth()+1}/${d.getDate()}`;
   rangeEl.textContent = `${fmtMD(days[0])} - ${fmtMD(days[6])}`;
 
-  // Filter incomplete todos with deadlines
-  const items = state.todos.filter(t => t.deadline && !t.isCompleted)
-    .sort((a, b) => (a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : 0));
+  // Filter todos with dates
+  const items = state.todos.filter(t => (t.startDate || t.deadline))
+    .sort((a, b) => ((a.startDate || a.deadline) < (b.startDate || b.deadline) ? -1 : 1));
 
   if (items.length === 0) {
-    container.innerHTML = '<div class="gantt-empty">暂无带截止日期的任务</div>';
+    container.innerHTML = '<div class="gantt-empty">暂无带时间范围的任务</div>';
     return;
   }
 
   container.innerHTML = '';
+  const dayMs = 86400000;
+  const todayStr = isoToday();
 
   // Day header row
   const headerRow = document.createElement('div');
   headerRow.className = 'gantt-row gantt-header-row';
-
   const headerLabel = document.createElement('div');
   headerLabel.className = 'gantt-row-label';
   headerRow.appendChild(headerLabel);
-
   const headerTimeline = document.createElement('div');
   headerTimeline.className = 'gantt-row-timeline';
   const dayNames = ['日','一','二','三','四','五','六'];
@@ -347,8 +446,6 @@ function renderGantt() {
   headerRow.appendChild(headerTimeline);
   container.appendChild(headerRow);
 
-  // Task rows
-  const todayStr = isoToday();
   items.forEach(item => {
     const row = document.createElement('div');
     row.className = 'gantt-row';
@@ -361,38 +458,43 @@ function renderGantt() {
 
     const timeline = document.createElement('div');
     timeline.className = 'gantt-row-timeline';
-
     days.forEach((d, i) => {
       const dayEl = document.createElement('div');
       dayEl.className = 'gantt-day' + (i === 0 ? ' today' : '');
       timeline.appendChild(dayEl);
     });
 
-    // Position bar
-    const deadlineDate = new Date(item.deadline + 'T00:00:00');
-    const deadlineTime = deadlineDate.getTime();
+    const startIso = item.startDate || item.deadline;
+    const endIso = item.deadline || item.startDate;
+    const startDate = parseLocalDate(startIso);
+    const endDate = parseLocalDate(endIso);
     const todayTime = today.getTime();
-    const dayMs = 86400000;
 
-    let dayIndex;
-    if (deadlineTime < todayTime) {
-      dayIndex = 0;
-    } else {
-      dayIndex = Math.round((deadlineTime - todayTime) / dayMs);
-      if (dayIndex > 6) dayIndex = 6;
+    let startOffset = Math.round((startDate.getTime() - todayTime) / dayMs);
+    let span = Math.round((endDate.getTime() - startDate.getTime()) / dayMs);
+
+    // Clamp
+    if (startOffset < 0) {
+      span += startOffset;
+      startOffset = 0;
     }
+    if (span < 0) span = 0;
+    if (startOffset > 6) startOffset = 6;
+    if (startOffset + span > 6) span = 6 - startOffset;
 
     const bar = document.createElement('div');
     bar.className = 'gantt-bar';
-    if (item.deadline < todayStr) {
+    if (item.isCompleted) {
+      bar.classList.add('done');
+    } else if (endIso < todayStr) {
       bar.classList.add('overdue');
     } else {
       bar.classList.add('pending');
     }
 
-    bar.style.left = (dayIndex / 7 * 100) + '%';
-    bar.style.width = (100 / 7) + '%';
-    bar.title = `${item.title}\n截止: ${item.deadline}`;
+    bar.style.left = (startOffset / 7 * 100) + '%';
+    bar.style.width = ((span + 1) / 7 * 100) + '%';
+    bar.title = `${item.title}\n${dateRangeLabel(item.startDate, item.deadline)}`;
 
     timeline.appendChild(bar);
     row.appendChild(timeline);
@@ -417,30 +519,6 @@ function renderCategoryTabs() {
     });
     container.appendChild(btn);
   });
-}
-
-/* ========== Rendering: Todo List ========== */
-function renderTodoList() {
-  const list = document.getElementById('todo-list');
-  list.innerHTML = '';
-
-  if (state.todos.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-emoji">🍑</div><div class="empty-text">还没有任务，添加一个吧！</div></div>';
-    return;
-  }
-
-  const incomplete = state.todos.filter(x => !x.isCompleted);
-  const completed = state.todos.filter(x => x.isCompleted);
-
-  incomplete.forEach(todo => list.appendChild(createItemCard(todo, 'todo')));
-
-  if (completed.length > 0) {
-    const label = document.createElement('div');
-    label.className = 'section-label';
-    label.textContent = '已完成';
-    list.appendChild(label);
-    completed.forEach(todo => list.appendChild(createItemCard(todo, 'todo')));
-  }
 }
 
 /* ========== Rendering: Watch List ========== */
@@ -469,16 +547,17 @@ function renderWatchList() {
 }
 
 /* ========== Deadline Badge Helper ========== */
-function createDeadlineBadge(iso) {
-  if (!iso) return null;
+function createDeadlineBadge(item) {
+  if (!item.deadline && !item.startDate) return null;
   const badge = document.createElement('div');
   badge.className = 'deadline-badge';
-  if (iso < isoToday()) {
+  const endIso = item.deadline || item.startDate;
+  if (!item.isCompleted && endIso < isoToday()) {
     badge.classList.add('overdue');
-  } else if (iso === isoToday()) {
+  } else if (!item.isCompleted && endIso === isoToday()) {
     badge.classList.add('today');
   }
-  badge.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${dateLabel(iso)}`;
+  badge.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${dateRangeLabel(item.startDate, item.deadline)}`;
   return badge;
 }
 
@@ -548,8 +627,8 @@ function createItemCard(item, type) {
   content.appendChild(titleEl);
 
   // Deadline badge (todo only)
-  if (type === 'todo' && item.deadline) {
-    const badge = createDeadlineBadge(item.deadline);
+  if (type === 'todo' && (item.startDate || item.deadline)) {
+    const badge = createDeadlineBadge(item);
     if (badge) content.appendChild(badge);
   }
 
@@ -725,7 +804,7 @@ function setupDragReorder(wrapper, card, handle, type) {
     }
     saveState();
     vibrate(15);
-    if (type === 'todo') renderTodoList();
+    if (type === 'todo') renderWorkspace();
     else renderWatchList();
   });
 
@@ -751,12 +830,15 @@ function openEditModal(type, id) {
 
   // Deadline for todo
   const deadlineRow = document.getElementById('modal-deadline-row');
+  const startInput = document.getElementById('modal-start-input');
   const deadlineInput = document.getElementById('modal-deadline-input');
   if (type === 'todo') {
     deadlineRow.style.display = 'flex';
+    startInput.value = item.startDate || '';
     deadlineInput.value = item.deadline || '';
   } else {
     deadlineRow.style.display = 'none';
+    startInput.value = '';
     deadlineInput.value = '';
   }
 
@@ -780,9 +862,10 @@ function saveEditModal() {
   if (!state.editing) return;
   const title = document.getElementById('edit-title-input').value;
   const note = document.getElementById('edit-note-input').value;
+  const startDate = document.getElementById('modal-start-input').value || null;
   const deadline = document.getElementById('modal-deadline-input').value || null;
   const { type, id } = state.editing;
-  if (type === 'todo') editTodo(id, title, note, deadline);
+  if (type === 'todo') editTodo(id, title, note, startDate, deadline);
   else editWatch(id, title, note);
   closeEditModal();
 }
@@ -799,7 +882,7 @@ function deleteFromEditModal() {
 function exportData() {
   try {
     const data = {
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       todos: state.todos,
       watchItems: state.watchItems,
@@ -835,10 +918,8 @@ function importData(file) {
         state.watchItems = (data.watchItems || []).map(migrateItem);
         state.currentCategory = data.currentCategory || 'drama';
         saveState();
-        renderTodoList();
+        renderWorkspace();
         renderWatchList();
-        renderGantt();
-        updateProgress();
         updateWatchProgress();
         vibrate(30);
         showToast(`已导入 ${importCount} 条数据！`);
@@ -875,7 +956,7 @@ function switchTab(tab) {
   closeAllSwipes();
   document.querySelectorAll('.tab-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
   document.querySelectorAll('.page').forEach(el => el.classList.toggle('active', el.id === tab + '-page'));
-  if (tab === 'todo') updateProgress();
+  if (tab === 'todo') renderWorkspace();
   else updateWatchProgress();
 }
 
@@ -885,18 +966,19 @@ function showDeadlineRow() {
 }
 
 function hideDeadlineRow() {
-  // Only hide if input is empty and no deadline selected
   const input = document.getElementById('todo-input');
+  const startInput = document.getElementById('start-input');
   const deadlineInput = document.getElementById('deadline-input');
-  if (!input.value.trim() && !deadlineInput.value) {
+  if (!input.value.trim() && !startInput.value && !deadlineInput.value) {
     document.getElementById('deadline-row').classList.remove('visible');
   }
 }
 
 function updateDeadlineClear() {
-  const input = document.getElementById('deadline-input');
+  const startInput = document.getElementById('start-input');
+  const deadlineInput = document.getElementById('deadline-input');
   const clearBtn = document.getElementById('deadline-clear');
-  if (input.value) {
+  if (startInput.value || deadlineInput.value) {
     clearBtn.classList.add('active');
   } else {
     clearBtn.classList.remove('active');
@@ -910,10 +992,18 @@ function setupEventListeners() {
     el.addEventListener('click', () => switchTab(el.dataset.tab));
   });
 
+  // ---- Search ----
+  const searchInput = document.getElementById('todo-search');
+  searchInput.addEventListener('input', () => {
+    state.searchQuery = searchInput.value.trim();
+    renderWorkspace();
+  });
+
   // ---- Todo input ----
   const todoInput = document.getElementById('todo-input');
   const todoAddBtn = document.getElementById('todo-add-btn');
   const deadlineRow = document.getElementById('deadline-row');
+  const startInput = document.getElementById('start-input');
   const deadlineInput = document.getElementById('deadline-input');
   const deadlineClear = document.getElementById('deadline-clear');
 
@@ -931,10 +1021,13 @@ function setupEventListeners() {
     setTimeout(() => hideDeadlineRow(), 150);
   });
 
+  startInput.addEventListener('change', updateDeadlineClear);
+  startInput.addEventListener('input', updateDeadlineClear);
   deadlineInput.addEventListener('change', updateDeadlineClear);
   deadlineInput.addEventListener('input', updateDeadlineClear);
 
   deadlineClear.addEventListener('click', () => {
+    startInput.value = '';
     deadlineInput.value = '';
     updateDeadlineClear();
   });
@@ -942,9 +1035,11 @@ function setupEventListeners() {
   function submitTodo() {
     const title = todoInput.value.trim();
     if (!title) return;
+    const startDate = startInput.value || null;
     const deadline = deadlineInput.value || null;
-    addTodo(title, deadline);
+    addTodo(title, startDate, deadline);
     todoInput.value = '';
+    startInput.value = '';
     deadlineInput.value = '';
     todoAddBtn.classList.remove('active');
     deadlineRow.classList.remove('visible');
@@ -1029,10 +1124,8 @@ function init() {
   loadState();
   document.getElementById('todo-date').textContent = formatDate();
   renderCategoryTabs();
-  renderTodoList();
+  renderWorkspace();
   renderWatchList();
-  renderGantt();
-  updateProgress();
   updateWatchProgress();
   setupEventListeners();
   registerSW();

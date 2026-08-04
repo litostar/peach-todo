@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="🍑todo">
   <meta name="theme-color" content="#FFFFFF">
@@ -21,46 +21,88 @@
 
     <!-- ========== Todo Page ========== -->
     <div id="todo-page" class="page active">
-      <header class="page-header">
-        <div class="header-row">
-          <div class="header-left">
-            <p class="date-text" id="todo-date"></p>
-            <h1 class="greeting">今天也要加油呀<span class="peach">🍑</span></h1>
+      <header class="workspace-header">
+        <div class="header-top">
+          <div class="avatar">🍑</div>
+          <div class="header-greeting">
+            <div class="date-text" id="todo-date"></div>
+            <h1 class="greeting">今天也要加油呀</h1>
           </div>
           <button class="settings-btn" id="todo-settings-btn" aria-label="设置">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
         </div>
+        <div class="search-bar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="todo-search" placeholder="搜索任务..." maxlength="100">
+        </div>
       </header>
 
-      <div class="progress-section">
-        <div class="progress-track">
-          <div class="progress-fill" id="todo-progress-fill"></div>
-        </div>
-        <div class="progress-stats">
-          <span id="todo-stats-text">0 / 0 已完成</span>
-          <span class="progress-percent" id="todo-stats-percent">0%</span>
-        </div>
-      </div>
-
-      <!-- ===== Gantt Chart ===== -->
-      <div class="gantt-section" id="gantt-section">
-        <div class="gantt-header">
-          <div class="gantt-title-wrap">
-            <svg class="gantt-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <span class="gantt-title">日程时间线</span>
+      <div class="workspace-scroll" id="todo-scroll">
+        <!-- Progress mini -->
+        <div class="progress-mini glass-card">
+          <div class="progress-mini-info">
+            <span class="progress-mini-label">今日进度</span>
+            <span class="progress-mini-percent" id="todo-stats-percent">0%</span>
           </div>
-          <span class="gantt-range" id="gantt-range"></span>
-        </div>
-        <div class="gantt-chart-wrapper">
-          <div class="gantt-chart" id="gantt-chart">
-            <div class="gantt-empty">暂无带截止日期的任务</div>
+          <div class="progress-track">
+            <div class="progress-fill" id="todo-progress-fill"></div>
           </div>
         </div>
-      </div>
 
-      <div class="list-container" id="todo-list-container">
-        <div class="item-list" id="todo-list"></div>
+        <!-- Gantt Chart -->
+        <div class="glass-card gantt-card" id="gantt-section">
+          <div class="card-header">
+            <div class="card-header-left">
+              <svg class="card-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span class="card-title">日程时间线</span>
+            </div>
+            <span class="card-subtitle" id="gantt-range"></span>
+          </div>
+          <div class="gantt-chart-wrapper">
+            <div class="gantt-chart" id="gantt-chart">
+              <div class="gantt-empty">暂无带截止日期的任务</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Today's Tasks -->
+        <div class="glass-card task-card">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-dot red"></div>
+              <span class="card-title">Today's Tasks</span>
+            </div>
+            <span class="card-count" id="today-count">0</span>
+          </div>
+          <div class="card-list" id="today-list"></div>
+        </div>
+
+        <!-- Upcoming -->
+        <div class="glass-card task-card">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-dot orange"></div>
+              <span class="card-title">Upcoming</span>
+            </div>
+            <span class="card-count" id="upcoming-count">0</span>
+          </div>
+          <div class="card-list" id="upcoming-list"></div>
+        </div>
+
+        <!-- Completed -->
+        <div class="glass-card task-card">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-dot green"></div>
+              <span class="card-title">Completed</span>
+            </div>
+            <span class="card-count" id="completed-count">0</span>
+          </div>
+          <div class="card-list" id="completed-list"></div>
+        </div>
+
+        <div class="workspace-bottom-spacer"></div>
       </div>
 
       <div class="input-bar" id="todo-input-bar">
@@ -71,19 +113,28 @@
           </button>
         </div>
         <div class="deadline-row" id="deadline-row">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <input type="date" class="deadline-input" id="deadline-input">
-          <button class="deadline-clear" id="deadline-clear" aria-label="清除截止时间">&times;</button>
-          <span class="deadline-hint">设置截止时间（可选）</span>
+          <div class="deadline-field">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span class="deadline-field-label">开始</span>
+            <input type="date" class="deadline-input" id="start-input">
+          </div>
+          <div class="deadline-field">
+            <span class="deadline-field-label">截止</span>
+            <input type="date" class="deadline-input" id="deadline-input">
+          </div>
+          <button class="deadline-clear" id="deadline-clear" aria-label="清除日期">&times;</button>
         </div>
       </div>
     </div>
 
     <!-- ========== Watch Page ========== -->
     <div id="watch-page" class="page">
-      <header class="page-header">
-        <div class="header-row">
-          <h1 class="page-title">待看清单</h1>
+      <header class="workspace-header">
+        <div class="header-top">
+          <div class="avatar">👀</div>
+          <div class="header-greeting">
+            <h1 class="greeting">待看清单</h1>
+          </div>
           <button class="settings-btn" id="watch-settings-btn" aria-label="设置">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
@@ -155,8 +206,14 @@
         <input type="text" class="modal-input" id="edit-title-input" placeholder="标题" maxlength="100">
         <textarea class="modal-textarea" id="edit-note-input" placeholder="备注（可选）" maxlength="200"></textarea>
         <div class="modal-edit-deadline" id="modal-deadline-row">
-          <label class="modal-deadline-label">截止时间</label>
-          <input type="date" class="modal-deadline-input" id="modal-deadline-input">
+          <div class="modal-deadline-field">
+            <label class="modal-deadline-label">开始</label>
+            <input type="date" class="modal-deadline-input" id="modal-start-input">
+          </div>
+          <div class="modal-deadline-field">
+            <label class="modal-deadline-label">截止</label>
+            <input type="date" class="modal-deadline-input" id="modal-deadline-input">
+          </div>
         </div>
         <div class="modal-actions">
           <button class="modal-btn danger" id="edit-delete-btn">删除</button>
