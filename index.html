@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="🍑todo">
+  <meta name="theme-color" content="#0A0A0F">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+  <link rel="icon" href="icon-192.png">
+  <title>🍑todo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ========== Todo Page ========== -->
+    <div id="todo-page" class="page active">
+      <header class="page-header">
+        <div class="header-row">
+          <div class="header-left">
+            <p class="date-text" id="todo-date"></p>
+            <h1 class="greeting">今天也要加油呀<span class="peach">🍑</span></h1>
+          </div>
+          <button class="settings-btn" id="todo-settings-btn" aria-label="设置">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="progress-section">
+        <div class="progress-track">
+          <div class="progress-fill" id="todo-progress-fill"></div>
+        </div>
+        <div class="progress-stats">
+          <span id="todo-stats-text">0 / 0 已完成</span>
+          <span class="progress-percent" id="todo-stats-percent">0%</span>
+        </div>
+      </div>
+
+      <!-- ===== Gantt Chart ===== -->
+      <div class="gantt-section" id="gantt-section">
+        <div class="gantt-header">
+          <div class="gantt-title-wrap">
+            <svg class="gantt-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span class="gantt-title">日程时间线</span>
+          </div>
+          <span class="gantt-range" id="gantt-range"></span>
+        </div>
+        <div class="gantt-chart-wrapper">
+          <div class="gantt-chart" id="gantt-chart">
+            <div class="gantt-empty">暂无带截止日期的任务</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="list-container" id="todo-list-container">
+        <div class="item-list" id="todo-list"></div>
+      </div>
+
+      <div class="input-bar" id="todo-input-bar">
+        <div class="input-row">
+          <input type="text" class="input-field" id="todo-input" placeholder="添加新任务..." maxlength="100">
+          <button class="add-btn" id="todo-add-btn" aria-label="添加">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="deadline-row" id="deadline-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <input type="date" class="deadline-input" id="deadline-input">
+          <button class="deadline-clear" id="deadline-clear" aria-label="清除截止时间">&times;</button>
+          <span class="deadline-hint">设置截止时间（可选）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== Watch Page ========== -->
+    <div id="watch-page" class="page">
+      <header class="page-header">
+        <div class="header-row">
+          <h1 class="page-title">待看清单</h1>
+          <button class="settings-btn" id="watch-settings-btn" aria-label="设置">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="category-tabs" id="category-tabs"></div>
+
+      <div class="progress-section compact">
+        <div class="progress-track">
+          <div class="progress-fill" id="watch-progress-fill"></div>
+        </div>
+        <div class="progress-stats">
+          <span id="watch-stats-text">0 / 0 已看</span>
+          <span class="progress-percent" id="watch-stats-percent">0%</span>
+        </div>
+      </div>
+
+      <div class="list-container" id="watch-list-container">
+        <div class="item-list" id="watch-list"></div>
+      </div>
+
+      <div class="input-bar">
+        <div class="input-row">
+          <input type="text" class="input-field" id="watch-input" placeholder="添加新项目..." maxlength="100">
+          <button class="add-btn" id="watch-add-btn" aria-label="添加">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== Bottom Tab Bar ========== -->
+    <nav class="tab-bar" id="tab-bar">
+      <button class="tab-item active" data-tab="todo">
+        <svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 11l3 3L22 4"/>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        </svg>
+        <span class="tab-label">待办</span>
+      </button>
+      <button class="tab-item" data-tab="watch">
+        <svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span class="tab-label">待看</span>
+      </button>
+    </nav>
+
+    <!-- ========== Settings Dropdown Menu ========== -->
+    <div class="settings-menu" id="settings-menu">
+      <button class="settings-menu-item" id="export-data-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>导出数据</span>
+      </button>
+      <button class="settings-menu-item" id="import-data-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>导入数据</span>
+      </button>
+    </div>
+    <input type="file" id="import-file-input" accept=".json" style="display:none">
+
+    <!-- ========== Edit Modal ========== -->
+    <div class="modal-overlay" id="edit-modal">
+      <div class="modal-sheet" id="edit-sheet">
+        <div class="modal-grip"></div>
+        <h2 class="modal-title">编辑</h2>
+        <input type="text" class="modal-input" id="edit-title-input" placeholder="标题" maxlength="100">
+        <textarea class="modal-textarea" id="edit-note-input" placeholder="备注（可选）" maxlength="200"></textarea>
+        <div class="modal-edit-deadline" id="modal-deadline-row">
+          <label class="modal-deadline-label">截止时间</label>
+          <input type="date" class="modal-deadline-input" id="modal-deadline-input">
+        </div>
+        <div class="modal-actions">
+          <button class="modal-btn danger" id="edit-delete-btn">删除</button>
+          <div class="modal-spacer"></div>
+          <button class="modal-btn secondary" id="edit-cancel-btn">取消</button>
+          <button class="modal-btn primary" id="edit-save-btn">保存</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
