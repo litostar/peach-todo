@@ -1,4 +1,4 @@
-const CACHE = 'peach-todo-v3';
+const CACHE = 'peach-todo-v4';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', e => {
@@ -17,8 +17,10 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Network-first for navigation requests (HTML pages)
-  if (e.request.mode === 'navigate') {
+  // Network-first for HTML and JS/CSS (so updates take effect immediately)
+  if (e.request.mode === 'navigate' ||
+      e.request.destination === 'script' ||
+      e.request.destination === 'style') {
     e.respondWith(
       fetch(e.request)
         .then(res => {
@@ -30,6 +32,6 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-  // Cache-first for other assets
+  // Cache-first for static assets (images, manifest)
   e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });

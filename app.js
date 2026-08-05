@@ -1083,13 +1083,8 @@ function setupEventListeners() {
     e.target.value = '';
   });
 
-  // Prevent double-tap zoom
-  let lastTouchEnd = 0;
-  document.addEventListener('touchend', e => {
-    const now = Date.now();
-    if (now - lastTouchEnd <= 300) e.preventDefault();
-    lastTouchEnd = now;
-  }, { passive: false });
+  // Note: double-tap zoom is prevented via CSS `touch-action: manipulation` on body.
+  // The previous JS touchend handler was blocking click events on buttons (Safari bug).
 }
 
 /* ========== PWA Service Worker ========== */
