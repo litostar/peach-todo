@@ -1,4 +1,4 @@
-const CACHE = 'peach-todo-v4';
+const CACHE = 'peach-todo-v8';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', e => {

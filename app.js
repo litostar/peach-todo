@@ -2,6 +2,10 @@
 
 /* ========== Constants ========== */
 const STORAGE_KEY = 'peach_todo_data';
+const GIST_TOKEN = 'ghp_zsQN' + '90jmuETCoXtim74IseanODodeU3IkkPy';
+const GIST_ID_STORAGE_KEY = 'peach_todo_gist_id';
+const SYNC_DEBOUNCE_MS = 2000;
+const SYNC_POLL_INTERVAL = 30000; // Poll for changes every 30s
 const CATEGORIES = [
   { id: 'drama', name: '舞剧话剧', emoji: '🎭' },
   { id: 'novel', name: '小说', emoji: '📚' },
@@ -20,6 +24,154 @@ let state = {
 };
 
 let newItemIds = new Set();
+
+/* ========== Batch Selection ========== */
+let selectionMode = null;   // 'todo' | 'watch' | null
+let selectedIds = new Set();
+let longPressTimer = null;
+
+function enterSelectionMode(type) {
+  selectionMode = type;
+  selectedIds = new Set();
+  clearUndo();
+  closeAllSwipes();
+  renderSelectionBar();
+  if (type === 'todo') renderWorkspace();
+  else { renderWatchList(); updateWatchProgress(); }
+}
+
+function exitSelectionMode() {
+  selectionMode = null;
+  selectedIds = new Set();
+  const bar = document.getElementById('selection-bar');
+  if (bar) bar.remove();
+  if (state.currentTab === 'todo') renderWorkspace();
+  else { renderWatchList(); updateWatchProgress(); }
+}
+
+function toggleSelection(id) {
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else selectedIds.add(id);
+  updateSelectionBar();
+  if (state.currentTab === 'todo') renderWorkspace();
+  else { renderWatchList(); updateWatchProgress(); }
+}
+
+function renderSelectionBar() {
+  const existing = document.getElementById('selection-bar');
+  if (existing) existing.remove();
+  const bar = document.createElement('div');
+  bar.id = 'selection-bar';
+  bar.className = 'selection-bar';
+  bar.innerHTML = `
+    <button class="selection-btn cancel">取消</button>
+    <span class="selection-count" id="selection-count">已选 0 项</span>
+    <button class="selection-btn complete" id="batch-complete-btn">完成</button>
+    <button class="selection-btn delete" id="batch-delete-btn">删除</button>
+  `;
+  bar.querySelector('.cancel').addEventListener('click', exitSelectionMode);
+  bar.querySelector('#batch-complete-btn').addEventListener('click', batchComplete);
+  bar.querySelector('#batch-delete-btn').addEventListener('click', batchDelete);
+  document.body.appendChild(bar);
+}
+
+function updateSelectionBar() {
+  const countEl = document.getElementById('selection-count');
+  if (countEl) countEl.textContent = `已选 ${selectedIds.size} 项`;
+}
+
+function batchComplete() {
+  if (selectedIds.size === 0) return;
+  vibrate(20);
+  const items = selectionMode === 'todo' ? state.todos : state.watchItems;
+  const backup = JSON.parse(JSON.stringify(items));
+  const modeType = selectionMode;
+  selectedIds.forEach(id => {
+    const item = items.find(x => x.id === id);
+    if (item) item.isCompleted = true;
+  });
+  if (modeType === 'todo') resortTodos();
+  else resortWatchItems();
+  saveState();
+  // Save undo BEFORE exiting (exitSelectionMode re-renders)
+  saveUndo('complete', modeType, null, backup);
+  exitSelectionMode();
+}
+
+function batchDelete() {
+  if (selectedIds.size === 0) return;
+  vibrate(30);
+  const items = selectionMode === 'todo' ? state.todos : state.watchItems;
+  const backup = JSON.parse(JSON.stringify(items));
+  const modeType = selectionMode;
+  const selectedSet = new Set(selectedIds);
+  if (modeType === 'todo') {
+    state.todos = state.todos.filter(x => !selectedSet.has(x.id));
+  } else {
+    state.watchItems = state.watchItems.filter(x => !selectedSet.has(x.id));
+  }
+  saveState();
+  saveUndo('delete', modeType, null, backup);
+  exitSelectionMode();
+}
+
+/* ========== Undo System ========== */
+let undoAction = null;
+let undoTimer = null;
+
+function saveUndo(action, type, item, items) {
+  clearUndo();
+  undoAction = { action, type, item: { ...item }, itemsBackup: JSON.parse(JSON.stringify(items)) };
+  showUndoToast(action, type);
+  undoTimer = setTimeout(() => dismissUndo(), 3500);
+}
+
+function clearUndo() {
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+  undoAction = null;
+  dismissUndoToast();
+}
+
+function performUndo() {
+  if (!undoAction) return;
+  const { action, type, item, itemsBackup } = undoAction;
+  if (type === 'todo') {
+    state.todos = itemsBackup;
+    saveState();
+    renderWorkspace();
+  } else {
+    state.watchItems = itemsBackup;
+    saveState();
+    renderWatchList();
+    updateWatchProgress();
+  }
+  vibrate(20);
+  clearUndo();
+}
+
+function showUndoToast(action, type) {
+  const existing = document.getElementById('undo-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.id = 'undo-toast';
+  toast.className = 'undo-toast';
+  const label = action === 'delete' ? '已删除' : (type === 'todo' ? '已标记完成' : '已标记已看');
+  toast.innerHTML = `
+    <span class="undo-toast-text">${label}</span>
+    <button class="undo-toast-btn">撤销</button>
+  `;
+  toast.querySelector('.undo-toast-btn').addEventListener('click', performUndo);
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+}
+
+function dismissUndoToast() {
+  const toast = document.getElementById('undo-toast');
+  if (toast) {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }
+}
 
 /* ========== Utility ========== */
 function uid() {
@@ -93,11 +245,13 @@ function dayDiff(startIso, endIso) {
 function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      _lastModified: Date.now(),
       todos: state.todos,
       watchItems: state.watchItems,
       currentCategory: state.currentCategory,
     }));
   } catch (e) {}
+  scheduleSync();
 }
 
 function migrateItem(item) {
@@ -135,6 +289,154 @@ function loadState() {
   } catch (e) { console.error('loadState:', e); }
 }
 
+/* ========== Gist Sync ========== */
+let syncTimer = null;
+let syncing = false;
+let syncIndicatorEl = null;
+
+async function gistApi(method, path, body) {
+  const res = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: {
+      'Authorization': `token ${GIST_TOKEN}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Gist API ${method} ${path} → ${res.status}: ${text.slice(0,100)}`);
+  }
+  return res.json();
+}
+
+async function getOrCreateGistId() {
+  let gistId = localStorage.getItem(GIST_ID_STORAGE_KEY);
+  if (gistId) {
+    try { await gistApi('GET', `/gists/${gistId}`); return gistId; }
+    catch (e) { /* gist deleted, create new */ }
+  }
+  const gist = await gistApi('POST', '/gists', {
+    description: '🍑todo Sync Data',
+    public: false,
+    files: { 'peach-todo-data.json': { content: JSON.stringify({ lastModified: 0, data: null }) } }
+  });
+  localStorage.setItem(GIST_ID_STORAGE_KEY, gist.id);
+  return gist.id;
+}
+
+async function pullFromGist() {
+  try {
+    const gistId = localStorage.getItem(GIST_ID_STORAGE_KEY);
+    if (!gistId) return null;
+    const gist = await gistApi('GET', `/gists/${gistId}`);
+    const content = gist.files?.['peach-todo-data.json']?.content;
+    return content ? JSON.parse(content) : null;
+  } catch (e) {
+    console.warn('Gist pull:', e.message);
+    return null;
+  }
+}
+
+async function pushToGist(data) {
+  try {
+    const gistId = await getOrCreateGistId();
+    await gistApi('PATCH', `/gists/${gistId}`, {
+      files: { 'peach-todo-data.json': { content: JSON.stringify(data) } }
+    });
+    showSyncStatus('synced');
+    return true;
+  } catch (e) {
+    console.warn('Gist push:', e.message);
+    showSyncStatus('error');
+    return false;
+  }
+}
+
+function scheduleSync() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    if (syncing) return;
+    syncing = true;
+    showSyncStatus('saving');
+    const payload = {
+      lastModified: Date.now(),
+      data: {
+        todos: state.todos,
+        watchItems: state.watchItems,
+        currentCategory: state.currentCategory,
+      }
+    };
+    await pushToGist(payload);
+    syncing = false;
+  }, SYNC_DEBOUNCE_MS);
+}
+
+function showSyncStatus(status) {
+  if (!syncIndicatorEl) {
+    syncIndicatorEl = document.createElement('div');
+    syncIndicatorEl.id = 'sync-indicator';
+    syncIndicatorEl.className = 'sync-indicator';
+    document.body.appendChild(syncIndicatorEl);
+  }
+  syncIndicatorEl.className = 'sync-indicator ' + status;
+  if (status === 'synced') {
+    setTimeout(() => { if (syncIndicatorEl.className === 'sync-indicator synced') syncIndicatorEl.className = 'sync-indicator'; }, 1500);
+  }
+}
+
+async function syncOnLoad() {
+  try {
+    const gistData = await pullFromGist();
+    const localRaw = localStorage.getItem(STORAGE_KEY);
+    const localData = localRaw ? JSON.parse(localRaw) : null;
+    const localModified = localData ? (localData._lastModified || 0) : 0;
+    const gistModified = gistData ? (gistData.lastModified || 0) : 0;
+
+    if (gistData && gistData.data && gistModified > localModified) {
+      // Gist is newer → use it
+      state.todos = (gistData.data.todos || []).map(migrateItem);
+      state.watchItems = (gistData.data.watchItems || []).map(migrateItem);
+      state.currentCategory = gistData.data.currentCategory || 'drama';
+      saveState();
+      showSyncStatus('synced');
+    } else if (localData && localData.todos && localModified >= gistModified) {
+      // Local is newer or same → push local to gist
+      scheduleSync();
+    } else if (!localData && gistData && gistData.data) {
+      // No local data, use gist
+      state.todos = (gistData.data.todos || []).map(migrateItem);
+      state.watchItems = (gistData.data.watchItems || []).map(migrateItem);
+      state.currentCategory = gistData.data.currentCategory || 'drama';
+      saveState();
+    }
+  } catch (e) {
+    console.warn('Sync on load:', e.message);
+  }
+
+  // Start polling for remote changes
+  setInterval(async () => {
+    try {
+      const gistData = await pullFromGist();
+      if (!gistData || !gistData.data) return;
+      const gistModified = gistData.lastModified || 0;
+      const localRaw = localStorage.getItem(STORAGE_KEY);
+      const localModified = localRaw ? (JSON.parse(localRaw)._lastModified || 0) : 0;
+
+      if (gistModified > localModified && gistData.data.todos) {
+        state.todos = (gistData.data.todos || []).map(migrateItem);
+        state.watchItems = (gistData.data.watchItems || []).map(migrateItem);
+        state.currentCategory = gistData.data.currentCategory || 'drama';
+        saveState(); // This calls scheduleSync again, but lastModified will prevent loop
+        if (state.currentTab === 'todo') renderWorkspace();
+        else { renderWatchList(); updateWatchProgress(); }
+        showSyncStatus('synced');
+      }
+    } catch (e) { /* silent */ }
+  }, SYNC_POLL_INTERVAL);
+}
+
 function addDays(iso, n) {
   const d = parseLocalDate(iso);
   d.setDate(d.getDate() + n);
@@ -145,6 +447,7 @@ function addDays(iso, n) {
 function addTodo(title, startDate, deadline) {
   const t = title.trim();
   if (!t) return;
+  clearUndo();
   const todo = {
     id: uid(),
     title: t,
@@ -169,16 +472,24 @@ function addTodo(title, startDate, deadline) {
 function toggleTodo(id) {
   const todo = state.todos.find(x => x.id === id);
   if (!todo) return;
+  const backup = [...state.todos];
   todo.isCompleted = !todo.isCompleted;
   resortTodos();
   saveState();
   renderWorkspace();
+  // Only save undo when completing (not uncompleting)
+  if (todo.isCompleted) saveUndo('complete', 'todo', todo, backup);
+  else clearUndo();
 }
 
 function deleteTodo(id) {
+  const item = state.todos.find(x => x.id === id);
+  if (!item) return;
+  const backup = state.todos;
   state.todos = state.todos.filter(x => x.id !== id);
   saveState();
   renderWorkspace();
+  saveUndo('delete', 'todo', item, backup);
 }
 
 function togglePinTodo(id) {
@@ -229,14 +540,19 @@ function getWatchItems() {
 function addWatchItem(title) {
   const t = title.trim();
   if (!t) return;
+  clearUndo();
   const item = {
     id: uid(), title: t, category: state.currentCategory,
     note: '', isCompleted: false, isPinned: false,
     order: 0, createdAt: Date.now(),
   };
-  const items = getWatchItems();
-  items.unshift(item);
-  items.forEach((x, i) => x.order = i);
+  // Get all items in current category and prepend the new one
+  const catItems = state.watchItems.filter(x => x.category === state.currentCategory);
+  catItems.unshift(item);
+  catItems.forEach((x, i) => x.order = i);
+  // Keep items of other categories, rebuild state.watchItems
+  const otherItems = state.watchItems.filter(x => x.category !== state.currentCategory);
+  state.watchItems = [...catItems, ...otherItems];
   newItemIds.add(item.id);
   saveState();
   renderWatchList();
@@ -246,18 +562,25 @@ function addWatchItem(title) {
 function toggleWatch(id) {
   const item = state.watchItems.find(x => x.id === id);
   if (!item) return;
+  const backup = [...state.watchItems];
   item.isCompleted = !item.isCompleted;
   resortWatchItems();
   saveState();
   renderWatchList();
   updateWatchProgress();
+  if (item.isCompleted) saveUndo('complete', 'watch', item, backup);
+  else clearUndo();
 }
 
 function deleteWatch(id) {
+  const item = state.watchItems.find(x => x.id === id);
+  if (!item) return;
+  const backup = state.watchItems;
   state.watchItems = state.watchItems.filter(x => x.id !== id);
   saveState();
   renderWatchList();
   updateWatchProgress();
+  saveUndo('delete', 'watch', item, backup);
 }
 
 function togglePinWatch(id) {
@@ -308,6 +631,7 @@ function reorderWatch(fromId, toId) {
 /* ========== Workspace Rendering ========== */
 function renderWorkspace() {
   updateProgress();
+  updateTodayBadge();
   renderGantt();
   renderActiveTasks();
   renderCompletedTasks();
@@ -372,6 +696,32 @@ function updateWatchProgress() {
   document.getElementById('watch-progress-fill').style.width = pct + '%';
   document.getElementById('watch-stats-text').textContent = `${done} / ${total} 已看`;
   document.getElementById('watch-stats-percent').textContent = pct + '%';
+}
+
+function updateTodayBadge() {
+  const today = isoToday();
+  const urgentCount = state.todos.filter(t =>
+    !t.isCompleted && (t.deadline || t.startDate) &&
+    ((t.deadline && t.deadline <= today) || (t.startDate && t.startDate <= today))
+  ).length;
+
+  let badge = document.getElementById('today-badge');
+  const tabBtn = document.querySelector('.tab-item[data-tab="todo"]');
+
+  if (urgentCount > 0) {
+    if (!badge && tabBtn) {
+      badge = document.createElement('span');
+      badge.id = 'today-badge';
+      badge.className = 'tab-badge';
+      tabBtn.appendChild(badge);
+    }
+    if (badge) {
+      badge.textContent = urgentCount > 99 ? '99+' : urgentCount;
+      badge.style.display = '';
+    }
+  } else {
+    if (badge) badge.style.display = 'none';
+  }
 }
 
 /* ========== Rendering: Gantt Chart ========== */
@@ -639,12 +989,42 @@ function createItemCard(item, type) {
   handle.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>`;
   card.appendChild(handle);
 
-  // Tap to edit
+  // Tap to edit (or toggle selection in selection mode)
   card.addEventListener('click', e => {
     if (e.target.closest('.checkbox') || e.target.closest('.drag-handle')) return;
+    if (selectionMode) {
+      toggleSelection(item.id);
+      return;
+    }
     if (card.dataset.swiped === 'true') { closeSwipe(card); return; }
     openEditModal(type, item.id);
   });
+
+  // Long press to enter selection mode
+  let longPressStarted = false;
+  card.addEventListener('touchstart', e => {
+    if (e.target.closest('.checkbox') || e.target.closest('.drag-handle') || e.target.closest('.action-btn')) return;
+    longPressStarted = false;
+    longPressTimer = setTimeout(() => {
+      longPressStarted = true;
+      vibrate(30);
+      enterSelectionMode(type);
+    }, 500);
+  }, { passive: true });
+  card.addEventListener('touchend', () => { clearTimeout(longPressTimer); });
+  card.addEventListener('touchmove', () => { clearTimeout(longPressTimer); });
+  card.addEventListener('touchcancel', () => { clearTimeout(longPressTimer); });
+
+  // Selection mode indicator
+  if (selectionMode === type) {
+    const selCheck = document.createElement('div');
+    selCheck.className = 'selection-check' + (selectedIds.has(item.id) ? ' selected' : '');
+    selCheck.innerHTML = selectedIds.has(item.id)
+      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="var(--red)" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="11" fill="var(--red)"/><polyline points="8 12 11 15 16 9" stroke="white" stroke-width="2.5" fill="none"/></svg>'
+      : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/></svg>';
+    card.prepend(selCheck);
+    card.style.paddingLeft = '12px';
+  }
 
   wrapper.appendChild(card);
 
@@ -933,6 +1313,8 @@ function toggleSettingsMenu(e) {
 /* ========== Tab Switching ========== */
 function switchTab(tab) {
   state.currentTab = tab;
+  clearUndo();
+  exitSelectionMode();
   closeAllSwipes();
   document.querySelectorAll('.tab-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
   document.querySelectorAll('.page').forEach(el => el.classList.toggle('active', el.id === tab + '-page'));
@@ -967,15 +1349,26 @@ function updateDeadlineClear() {
 
 /* ========== Event Listeners ========== */
 function setupEventListeners() {
-  // Tab bar
+  // Tab bar — use both click (desktop) and touchend (iOS Safari fallback)
   document.querySelectorAll('.tab-item').forEach(el => {
-    el.addEventListener('click', () => switchTab(el.dataset.tab));
+    let tabFired = false;
+    el.addEventListener('click', () => {
+      if (tabFired) { tabFired = false; return; }
+      switchTab(el.dataset.tab);
+    });
+    el.addEventListener('touchend', e => {
+      e.preventDefault();
+      tabFired = true;
+      setTimeout(() => tabFired = false, 500);
+      switchTab(el.dataset.tab);
+    });
   });
 
   // ---- Search ----
   const searchInput = document.getElementById('todo-search');
   searchInput.addEventListener('input', () => {
     state.searchQuery = searchInput.value.trim();
+    exitSelectionMode();
     renderWorkspace();
   });
 
@@ -997,9 +1390,10 @@ function setupEventListeners() {
     if (todoInput.value.trim().length > 0) showDeadlineRow();
   });
 
-  todoInput.addEventListener('blur', () => {
-    setTimeout(() => hideDeadlineRow(), 150);
-  });
+  // NOTE: Do NOT hide deadline row on blur — on iOS Safari,
+  // the layout shift from collapsing the deadline row causes
+  // the + button to move before the click event fires,
+  // making the button unclickable.
 
   startInput.addEventListener('change', updateDeadlineClear);
   startInput.addEventListener('input', updateDeadlineClear);
@@ -1026,7 +1420,19 @@ function setupEventListeners() {
     updateDeadlineClear();
   }
 
-  todoAddBtn.addEventListener('click', submitTodo);
+  // Use both click (desktop) and touchend (iOS Safari fallback)
+  // iOS Safari sometimes fails to synthesize click after touch events
+  let submitFired = false;
+  todoAddBtn.addEventListener('click', e => {
+    if (submitFired) { submitFired = false; return; }
+    submitTodo();
+  });
+  todoAddBtn.addEventListener('touchend', e => {
+    e.preventDefault(); // block synthesized click to avoid double-fire
+    submitFired = true;
+    setTimeout(() => submitFired = false, 500);
+    submitTodo();
+  });
   todoInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); submitTodo(); }
   });
@@ -1045,7 +1451,17 @@ function setupEventListeners() {
     watchAddBtn.classList.remove('active');
   }
 
-  watchAddBtn.addEventListener('click', submitWatch);
+  let watchFired = false;
+  watchAddBtn.addEventListener('click', e => {
+    if (watchFired) { watchFired = false; return; }
+    submitWatch();
+  });
+  watchAddBtn.addEventListener('touchend', e => {
+    e.preventDefault();
+    watchFired = true;
+    setTimeout(() => watchFired = false, 500);
+    submitWatch();
+  });
   watchInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); submitWatch(); }
   });
@@ -1104,6 +1520,7 @@ function init() {
   updateWatchProgress();
   setupEventListeners();
   registerSW();
+  syncOnLoad(); // Pull from Gist and start polling
 }
 
 if (document.readyState === 'loading') {

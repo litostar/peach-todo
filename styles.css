@@ -805,12 +805,37 @@ button {
   padding: 8px 0 6px;
   color: var(--text-tertiary);
   transition: all 0.2s ease;
+  position: relative;
 }
 .tab-item.active {
   color: var(--red);
 }
 .tab-icon { width: 24px; height: 24px; }
 .tab-label { font-size: 10px; font-weight: 500; }
+
+.tab-badge {
+  position: absolute;
+  top: 2px;
+  right: calc(50% - 28px);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px var(--red-glow);
+  animation: badgePopIn 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes badgePopIn {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
 
 /* ========== Modal ========== */
 .modal-overlay {
@@ -1012,6 +1037,138 @@ button {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ========== Undo Toast ========== */
+.undo-toast {
+  position: fixed;
+  bottom: calc(90px + var(--safe-bottom, 0px));
+  left: 16px;
+  right: 16px;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: rgba(28, 28, 30, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 14px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  transform: translateY(60px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.undo-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+.undo-toast-text {
+  flex: 1;
+}
+.undo-toast-btn {
+  color: var(--red);
+  font-weight: 600;
+  font-size: 15px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.undo-toast-btn:active {
+  background: rgba(255,59,48,0.15);
+}
+
+/* ========== Batch Selection Bar ========== */
+.selection-bar {
+  position: fixed;
+  bottom: calc(60px + var(--safe-bottom, 0px));
+  left: 0;
+  right: 0;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  padding-bottom: calc(10px + var(--safe-bottom, 0px));
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border-light);
+  animation: slideUp 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.selection-btn {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+.selection-btn.cancel {
+  color: var(--text-secondary);
+  margin-right: auto;
+}
+.selection-btn.cancel:active {
+  background: rgba(0,0,0,0.05);
+}
+.selection-btn.complete {
+  color: white;
+  background: var(--green);
+}
+.selection-btn.complete:active {
+  background: #2bb04a;
+}
+.selection-btn.delete {
+  color: white;
+  background: var(--red);
+}
+.selection-btn.delete:active {
+  background: #e63026;
+}
+
+.selection-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ========== Selection Checkbox ========== */
+.selection-check {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+  color: var(--text-tertiary);
+  animation: scaleIn 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.selection-check.selected {
+  color: var(--red);
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
 /* ========== Animations ========== */
 @keyframes slideInBottom {
   from { opacity: 0; transform: translateY(12px); }
@@ -1037,4 +1194,31 @@ button {
   border-radius: var(--radius-md);
   border: 1px dashed var(--border-light);
   opacity: 0.4;
+}
+
+/* ========== Sync Indicator ========== */
+.sync-indicator {
+  position: fixed;
+  top: calc(12px + var(--safe-top));
+  right: 56px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  z-index: 100;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+.sync-indicator.saving {
+  background: #FFB800;
+  box-shadow: 0 0 6px rgba(255,184,0,0.5);
+}
+.sync-indicator.synced {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green-glow);
+}
+.sync-indicator.error {
+  background: var(--red);
+  box-shadow: 0 0 6px rgba(255,59,48,0.5);
+  animation: ganttPulse 2s ease-in-out infinite;
 }
