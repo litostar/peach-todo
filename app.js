@@ -120,9 +120,9 @@ function loadState() {
       const tomorrow = addDays(today, 1);
       const nextWeek = addDays(today, 5);
       state.todos = [
-        { id: uid(), title: '欢迎来到 🍑todo！', isCompleted: false, isPinned: false, order: 0, createdAt: Date.now(), startDate: today, deadline: today, note: '' },
-        { id: uid(), title: '点击左侧圆圈完成任务', isCompleted: false, isPinned: false, order: 1, createdAt: Date.now(), startDate: today, deadline: tomorrow, note: '' },
-        { id: uid(), title: '试试添加起止时间 ⏰', isCompleted: false, isPinned: false, order: 2, createdAt: Date.now(), startDate: today, deadline: nextWeek, note: '' },
+        { id: uid(), title: '试试点左侧圆圈完成任务', isCompleted: false, isPinned: false, order: 0, createdAt: Date.now(), startDate: null, deadline: null, note: '' },
+        { id: uid(), title: '试试添加起止时间（点输入框自动展开）', isCompleted: false, isPinned: false, order: 1, createdAt: Date.now(), startDate: today, deadline: nextWeek, note: '' },
+        { id: uid(), title: '右滑任务可以删除或置顶', isCompleted: false, isPinned: false, order: 2, createdAt: Date.now(), startDate: null, deadline: null, note: '' },
       ];
       state.watchItems = [
         { id: uid(), title: '茶馆', category: 'drama', note: '北京人艺', isCompleted: false, isPinned: true, order: 0, createdAt: Date.now() },
@@ -309,8 +309,7 @@ function reorderWatch(fromId, toId) {
 function renderWorkspace() {
   updateProgress();
   renderGantt();
-  renderTodayTasks();
-  renderUpcomingTasks();
+  renderActiveTasks();
   renderCompletedTasks();
 }
 
@@ -320,43 +319,24 @@ function filterBySearch(todos) {
   return todos.filter(t => t.title.toLowerCase().includes(q) || (t.note && t.note.toLowerCase().includes(q)));
 }
 
-function getTodayTasks() {
-  const today = isoToday();
-  return state.todos.filter(t => !t.isCompleted && (
-    t.deadline === today ||
-    (t.startDate && t.deadline && today >= t.startDate && today <= t.deadline)
-  ));
+function getActiveTodos() {
+  return state.todos.filter(t => !t.isCompleted);
 }
 
-function getUpcomingTasks() {
-  const today = isoToday();
-  return state.todos.filter(t => !t.isCompleted && (
-    (t.deadline && t.deadline > today && (t.startDate === null || t.startDate > today)) ||
-    (t.startDate && t.startDate > today)
-  ));
-}
-
-function getCompletedTasks() {
+function getCompletedTodos() {
   return state.todos.filter(t => t.isCompleted);
 }
 
-function renderTodayTasks() {
-  const list = document.getElementById('today-list');
-  const tasks = filterBySearch(getTodayTasks());
-  document.getElementById('today-count').textContent = tasks.length;
-  renderCardList(list, tasks, 'todo', 'today');
-}
-
-function renderUpcomingTasks() {
-  const list = document.getElementById('upcoming-list');
-  const tasks = filterBySearch(getUpcomingTasks());
-  document.getElementById('upcoming-count').textContent = tasks.length;
-  renderCardList(list, tasks, 'todo', 'upcoming');
+function renderActiveTasks() {
+  const list = document.getElementById('active-list');
+  const tasks = filterBySearch(getActiveTodos());
+  document.getElementById('active-count').textContent = tasks.length;
+  renderCardList(list, tasks, 'todo', 'active');
 }
 
 function renderCompletedTasks() {
   const list = document.getElementById('completed-list');
-  const tasks = filterBySearch(getCompletedTasks());
+  const tasks = filterBySearch(getCompletedTodos());
   document.getElementById('completed-count').textContent = tasks.length;
   renderCardList(list, tasks, 'todo', 'completed');
 }
@@ -366,8 +346,8 @@ function renderCardList(container, items, type, section) {
   if (items.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    const emojiMap = { today: '📋', upcoming: '🚀', completed: '✨' };
-    const textMap = { today: '今天暂无任务', upcoming: '暂无 upcoming 任务', completed: '还没有已完成任务' };
+    const emojiMap = { active: '📋', completed: '✨' };
+    const textMap = { active: '还没有待办任务', completed: '还没有已完成任务' };
     empty.innerHTML = `<div class="empty-emoji">${emojiMap[section] || '🍑'}</div><div class="empty-text">${textMap[section] || '还没有任务'}</div>`;
     container.appendChild(empty);
     return;
