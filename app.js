@@ -7,18 +7,28 @@ const GIST_ID_STORAGE_KEY = 'peach_todo_gist_id';
 const SYNC_DEBOUNCE_MS = 2000;
 const SYNC_POLL_INTERVAL = 30000; // Poll for changes every 30s
 const CATEGORIES = [
-  { id: 'drama', name: '舞剧话剧', emoji: '🎭' },
+  { id: 'drama', name: '演出', emoji: '🎭' },
   { id: 'novel', name: '小说', emoji: '📚' },
   { id: 'tv', name: '电视剧', emoji: '📺' },
   { id: 'movie', name: '电影', emoji: '🎬' },
+];
+
+const SHOPPING_CATEGORIES = [
+  { id: 'electronics', name: '电子产品', emoji: '💻' },
+  { id: 'home', name: '生活用品', emoji: '🏠' },
+  { id: 'fashion', name: '服饰鞋包', emoji: '👕' },
+  { id: 'food', name: '食品饮料', emoji: '🍜' },
+  { id: 'other', name: '其他', emoji: '📦' },
 ];
 
 /* ========== State ========== */
 let state = {
   currentTab: 'todo',
   currentCategory: 'drama',
+  currentShoppingCategory: 'electronics',
   todos: [],
   watchItems: [],
+  shoppingItems: [],
   editing: null,       // { type, id }
   searchQuery: '',
 };
@@ -37,7 +47,8 @@ function enterSelectionMode(type) {
   closeAllSwipes();
   renderSelectionBar();
   if (type === 'todo') renderWorkspace();
-  else { renderWatchList(); updateWatchProgress(); }
+  else if (type === 'watch') { renderWatchList(); updateWatchProgress(); }
+  else { renderShoppingList(); updateShoppingProgress(); }
 }
 
 function exitSelectionMode() {
@@ -46,7 +57,8 @@ function exitSelectionMode() {
   const bar = document.getElementById('selection-bar');
   if (bar) bar.remove();
   if (state.currentTab === 'todo') renderWorkspace();
-  else { renderWatchList(); updateWatchProgress(); }
+  else if (state.currentTab === 'watch') { renderWatchList(); updateWatchProgress(); }
+  else { renderShoppingList(); updateShoppingProgress(); }
 }
 
 function toggleSelection(id) {
@@ -54,7 +66,8 @@ function toggleSelection(id) {
   else selectedIds.add(id);
   updateSelectionBar();
   if (state.currentTab === 'todo') renderWorkspace();
-  else { renderWatchList(); updateWatchProgress(); }
+  else if (state.currentTab === 'watch') { renderWatchList(); updateWatchProgress(); }
+  else { renderShoppingList(); updateShoppingProgress(); }
 }
 
 function renderSelectionBar() {
@@ -83,17 +96,17 @@ function updateSelectionBar() {
 function batchComplete() {
   if (selectedIds.size === 0) return;
   vibrate(20);
-  const items = selectionMode === 'todo' ? state.todos : state.watchItems;
-  const backup = JSON.parse(JSON.stringify(items));
   const modeType = selectionMode;
+  const items = modeType === 'todo' ? state.todos : modeType === 'watch' ? state.watchItems : state.shoppingItems;
+  const backup = JSON.parse(JSON.stringify(items));
   selectedIds.forEach(id => {
     const item = items.find(x => x.id === id);
     if (item) item.isCompleted = true;
   });
   if (modeType === 'todo') resortTodos();
-  else resortWatchItems();
+  else if (modeType === 'watch') resortWatchItems();
+  else resortShoppingItems();
   saveState();
-  // Save undo BEFORE exiting (exitSelectionMode re-renders)
   saveUndo('complete', modeType, null, backup);
   exitSelectionMode();
 }
@@ -101,14 +114,16 @@ function batchComplete() {
 function batchDelete() {
   if (selectedIds.size === 0) return;
   vibrate(30);
-  const items = selectionMode === 'todo' ? state.todos : state.watchItems;
-  const backup = JSON.parse(JSON.stringify(items));
   const modeType = selectionMode;
+  const items = modeType === 'todo' ? state.todos : modeType === 'watch' ? state.watchItems : state.shoppingItems;
+  const backup = JSON.parse(JSON.stringify(items));
   const selectedSet = new Set(selectedIds);
   if (modeType === 'todo') {
     state.todos = state.todos.filter(x => !selectedSet.has(x.id));
-  } else {
+  } else if (modeType === 'watch') {
     state.watchItems = state.watchItems.filter(x => !selectedSet.has(x.id));
+  } else {
+    state.shoppingItems = state.shoppingItems.filter(x => !selectedSet.has(x.id));
   }
   saveState();
   saveUndo('delete', modeType, null, backup);
@@ -139,11 +154,16 @@ function performUndo() {
     state.todos = itemsBackup;
     saveState();
     renderWorkspace();
-  } else {
+  } else if (type === 'watch') {
     state.watchItems = itemsBackup;
     saveState();
     renderWatchList();
     updateWatchProgress();
+  } else {
+    state.shoppingItems = itemsBackup;
+    saveState();
+    renderShoppingList();
+    updateShoppingProgress();
   }
   vibrate(20);
   clearUndo();
@@ -155,7 +175,7 @@ function showUndoToast(action, type) {
   const toast = document.createElement('div');
   toast.id = 'undo-toast';
   toast.className = 'undo-toast';
-  const label = action === 'delete' ? '已删除' : (type === 'todo' ? '已标记完成' : '已标记已看');
+  const label = action === 'delete' ? '已删除' : (type === 'todo' ? '已标记完成' : type === 'watch' ? '已标记已看' : '已标记已买');
   toast.innerHTML = `
     <span class="undo-toast-text">${label}</span>
     <button class="undo-toast-btn">撤销</button>
@@ -248,7 +268,9 @@ function saveState() {
       _lastModified: Date.now(),
       todos: state.todos,
       watchItems: state.watchItems,
+      shoppingItems: state.shoppingItems,
       currentCategory: state.currentCategory,
+      currentShoppingCategory: state.currentShoppingCategory,
     }));
   } catch (e) {}
   scheduleSync();
@@ -268,7 +290,9 @@ function loadState() {
       const data = JSON.parse(raw);
       state.todos = (data.todos || []).map(migrateItem);
       state.watchItems = (data.watchItems || []).map(migrateItem);
+      state.shoppingItems = (data.shoppingItems || []).map(migrateItem);
       state.currentCategory = data.currentCategory || 'drama';
+      state.currentShoppingCategory = data.currentShoppingCategory || 'electronics';
     } else {
       const today = isoToday();
       const tomorrow = addDays(today, 1);
@@ -365,7 +389,9 @@ function scheduleSync() {
       data: {
         todos: state.todos,
         watchItems: state.watchItems,
+        shoppingItems: state.shoppingItems,
         currentCategory: state.currentCategory,
+        currentShoppingCategory: state.currentShoppingCategory,
       }
     };
     await pushToGist(payload);
@@ -398,7 +424,9 @@ async function syncOnLoad() {
       // Gist is newer → use it
       state.todos = (gistData.data.todos || []).map(migrateItem);
       state.watchItems = (gistData.data.watchItems || []).map(migrateItem);
+      state.shoppingItems = (gistData.data.shoppingItems || []).map(migrateItem);
       state.currentCategory = gistData.data.currentCategory || 'drama';
+      state.currentShoppingCategory = gistData.data.currentShoppingCategory || 'electronics';
       saveState();
       showSyncStatus('synced');
     } else if (localData && localData.todos && localModified >= gistModified) {
@@ -408,7 +436,9 @@ async function syncOnLoad() {
       // No local data, use gist
       state.todos = (gistData.data.todos || []).map(migrateItem);
       state.watchItems = (gistData.data.watchItems || []).map(migrateItem);
+      state.shoppingItems = (gistData.data.shoppingItems || []).map(migrateItem);
       state.currentCategory = gistData.data.currentCategory || 'drama';
+      state.currentShoppingCategory = gistData.data.currentShoppingCategory || 'electronics';
       saveState();
     }
   } catch (e) {
@@ -427,10 +457,13 @@ async function syncOnLoad() {
       if (gistModified > localModified && gistData.data.todos) {
         state.todos = (gistData.data.todos || []).map(migrateItem);
         state.watchItems = (gistData.data.watchItems || []).map(migrateItem);
+        state.shoppingItems = (gistData.data.shoppingItems || []).map(migrateItem);
         state.currentCategory = gistData.data.currentCategory || 'drama';
+        state.currentShoppingCategory = gistData.data.currentShoppingCategory || 'electronics';
         saveState(); // This calls scheduleSync again, but lastModified will prevent loop
         if (state.currentTab === 'todo') renderWorkspace();
-        else { renderWatchList(); updateWatchProgress(); }
+        else if (state.currentTab === 'watch') { renderWatchList(); updateWatchProgress(); }
+        else { renderShoppingList(); updateShoppingProgress(); }
         showSyncStatus('synced');
       }
     } catch (e) { /* silent */ }
@@ -628,6 +661,100 @@ function reorderWatch(fromId, toId) {
   renderWatchList();
 }
 
+/* ========== Shopping Operations ========== */
+function getShoppingItems() {
+  return state.shoppingItems.filter(x => x.category === state.currentShoppingCategory);
+}
+
+function addShoppingItem(title) {
+  const t = title.trim();
+  if (!t) return;
+  clearUndo();
+  const item = {
+    id: uid(), title: t, category: state.currentShoppingCategory,
+    note: '', isCompleted: false, isPinned: false,
+    order: 0, createdAt: Date.now(),
+  };
+  const catItems = state.shoppingItems.filter(x => x.category === state.currentShoppingCategory);
+  catItems.unshift(item);
+  catItems.forEach((x, i) => x.order = i);
+  const otherItems = state.shoppingItems.filter(x => x.category !== state.currentShoppingCategory);
+  state.shoppingItems = [...catItems, ...otherItems];
+  newItemIds.add(item.id);
+  saveState();
+  renderShoppingList();
+  updateShoppingProgress();
+}
+
+function toggleShopping(id) {
+  const item = state.shoppingItems.find(x => x.id === id);
+  if (!item) return;
+  const backup = [...state.shoppingItems];
+  item.isCompleted = !item.isCompleted;
+  resortShoppingItems();
+  saveState();
+  renderShoppingList();
+  updateShoppingProgress();
+  if (item.isCompleted) saveUndo('complete', 'shopping', item, backup);
+  else clearUndo();
+}
+
+function deleteShopping(id) {
+  const item = state.shoppingItems.find(x => x.id === id);
+  if (!item) return;
+  const backup = state.shoppingItems;
+  state.shoppingItems = state.shoppingItems.filter(x => x.id !== id);
+  saveState();
+  renderShoppingList();
+  updateShoppingProgress();
+  saveUndo('delete', 'shopping', item, backup);
+}
+
+function togglePinShopping(id) {
+  const item = state.shoppingItems.find(x => x.id === id);
+  if (!item) return;
+  item.isPinned = !item.isPinned;
+  resortShoppingItems();
+  saveState();
+  renderShoppingList();
+}
+
+function editShopping(id, title, note) {
+  const item = state.shoppingItems.find(x => x.id === id);
+  if (!item) return;
+  const t = title.trim();
+  if (!t) { deleteShopping(id); return; }
+  item.title = t;
+  item.note = note.trim();
+  saveState();
+  renderShoppingList();
+}
+
+function resortShoppingItems() {
+  const cat = state.currentShoppingCategory;
+  const items = state.shoppingItems.filter(x => x.category === cat);
+  const pinned = items.filter(x => x.isPinned && !x.isCompleted);
+  const incomplete = items.filter(x => !x.isPinned && !x.isCompleted);
+  const pinnedDone = items.filter(x => x.isPinned && x.isCompleted);
+  const completed = items.filter(x => !x.isPinned && x.isCompleted);
+  const reordered = [...pinned, ...incomplete, ...pinnedDone, ...completed];
+  const others = state.shoppingItems.filter(x => x.category !== cat);
+  state.shoppingItems = [...others, ...reordered];
+}
+
+function reorderShopping(fromId, toId) {
+  const items = getShoppingItems();
+  const fromIdx = items.findIndex(x => x.id === fromId);
+  const toIdx = items.findIndex(x => x.id === toId);
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+  const [moved] = items.splice(fromIdx, 1);
+  items.splice(toIdx, 0, moved);
+  const others = state.shoppingItems.filter(x => x.category !== state.currentShoppingCategory);
+  state.shoppingItems = [...others, ...items];
+  saveState();
+  renderShoppingList();
+}
+
 /* ========== Workspace Rendering ========== */
 function renderWorkspace() {
   updateProgress();
@@ -696,6 +823,16 @@ function updateWatchProgress() {
   document.getElementById('watch-progress-fill').style.width = pct + '%';
   document.getElementById('watch-stats-text').textContent = `${done} / ${total} 已看`;
   document.getElementById('watch-stats-percent').textContent = pct + '%';
+}
+
+function updateShoppingProgress() {
+  const items = getShoppingItems();
+  const total = items.length;
+  const done = items.filter(x => x.isCompleted).length;
+  const pct = total > 0 ? Math.round((done/total)*100) : 0;
+  document.getElementById('shopping-progress-fill').style.width = pct + '%';
+  document.getElementById('shopping-stats-text').textContent = `${done} / ${total} 已买`;
+  document.getElementById('shopping-stats-percent').textContent = pct + '%';
 }
 
 function updateTodayBadge() {
@@ -876,6 +1013,50 @@ function renderWatchList() {
   }
 }
 
+/* ========== Rendering: Shopping Category Tabs ========== */
+function renderShoppingCategoryTabs() {
+  const container = document.getElementById('shopping-category-tabs');
+  container.innerHTML = '';
+  SHOPPING_CATEGORIES.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-tab' + (cat.id === state.currentShoppingCategory ? ' active' : '');
+    btn.innerHTML = `<span class="cat-emoji">${cat.emoji}</span><span>${cat.name}</span>`;
+    btn.addEventListener('click', () => {
+      state.currentShoppingCategory = cat.id;
+      saveState();
+      renderShoppingCategoryTabs();
+      renderShoppingList();
+      updateShoppingProgress();
+    });
+    container.appendChild(btn);
+  });
+}
+
+/* ========== Rendering: Shopping List ========== */
+function renderShoppingList() {
+  const list = document.getElementById('shopping-list');
+  list.innerHTML = '';
+
+  const items = getShoppingItems();
+  if (items.length === 0) {
+    const cat = SHOPPING_CATEGORIES.find(c => c.id === state.currentShoppingCategory);
+    list.innerHTML = `<div class="empty-state"><div class="empty-emoji">${cat?cat.emoji:'🛒'}</div><div class="empty-text">还没有${cat?cat.name:''}，添加一个吧！</div></div>`;
+    return;
+  }
+
+  const incomplete = items.filter(x => !x.isCompleted);
+  const completed = items.filter(x => x.isCompleted);
+
+  incomplete.forEach(item => list.appendChild(createItemCard(item, 'shopping')));
+  if (completed.length > 0) {
+    const label = document.createElement('div');
+    label.className = 'section-label';
+    label.textContent = '已买';
+    list.appendChild(label);
+    completed.forEach(item => list.appendChild(createItemCard(item, 'shopping')));
+  }
+}
+
 /* ========== Deadline Badge Helper ========== */
 function createDeadlineBadge(item) {
   if (!item.deadline && !item.startDate) return null;
@@ -913,7 +1094,8 @@ function createItemCard(item, type) {
   pinBtn.addEventListener('click', e => {
     e.stopPropagation();
     if (type==='todo') togglePinTodo(item.id);
-    else togglePinWatch(item.id);
+    else if (type==='watch') togglePinWatch(item.id);
+    else togglePinShopping(item.id);
   });
 
   const delBtn = document.createElement('button');
@@ -923,7 +1105,8 @@ function createItemCard(item, type) {
     e.stopPropagation();
     vibrate(30);
     if (type==='todo') deleteTodo(item.id);
-    else deleteWatch(item.id);
+    else if (type==='watch') deleteWatch(item.id);
+    else deleteShopping(item.id);
   });
 
   actions.appendChild(pinBtn);
@@ -944,7 +1127,8 @@ function createItemCard(item, type) {
     vibrate(15);
     setTimeout(() => checkbox.classList.remove('pulsing'), 300);
     if (type==='todo') toggleTodo(item.id);
-    else toggleWatch(item.id);
+    else if (type==='watch') toggleWatch(item.id);
+    else toggleShopping(item.id);
   });
 
   // Content
@@ -962,8 +1146,8 @@ function createItemCard(item, type) {
     if (badge) content.appendChild(badge);
   }
 
-  // Note (watch only)
-  if (type === 'watch' && item.note) {
+  // Note (watch & shopping)
+  if ((type === 'watch' || type === 'shopping') && item.note) {
     const noteEl = document.createElement('div');
     noteEl.className = 'item-note';
     noteEl.textContent = item.note;
@@ -1153,7 +1337,7 @@ function setupDragReorder(wrapper, card, handle, type) {
         if (t) newOrder.push(t);
       });
       if (newOrder.length > 0) state.todos = newOrder;
-    } else {
+    } else if (type === 'watch') {
       const catItems = [];
       allWrappers.forEach(w => {
         const it = state.watchItems.find(x => x.id === w.dataset.id);
@@ -1161,11 +1345,20 @@ function setupDragReorder(wrapper, card, handle, type) {
       });
       const others = state.watchItems.filter(x => x.category !== state.currentCategory);
       state.watchItems = [...others, ...catItems];
+    } else {
+      const catItems = [];
+      allWrappers.forEach(w => {
+        const it = state.shoppingItems.find(x => x.id === w.dataset.id);
+        if (it) catItems.push(it);
+      });
+      const others = state.shoppingItems.filter(x => x.category !== state.currentShoppingCategory);
+      state.shoppingItems = [...others, ...catItems];
     }
     saveState();
     vibrate(15);
     if (type === 'todo') renderWorkspace();
-    else renderWatchList();
+    else if (type === 'watch') renderWatchList();
+    else renderShoppingList();
   });
 
   handle.addEventListener('touchcancel', () => {
@@ -1179,7 +1372,7 @@ function setupDragReorder(wrapper, card, handle, type) {
 
 /* ========== Edit Modal ========== */
 function openEditModal(type, id) {
-  const items = type === 'todo' ? state.todos : state.watchItems;
+  const items = type === 'todo' ? state.todos : type === 'watch' ? state.watchItems : state.shoppingItems;
   const item = items.find(x => x.id === id);
   if (!item) return;
 
@@ -1203,7 +1396,7 @@ function openEditModal(type, id) {
   }
 
   const noteInput = document.getElementById('edit-note-input');
-  if (type === 'watch') {
+  if (type === 'watch' || type === 'shopping') {
     noteInput.style.display = '';
   } else {
     noteInput.style.display = 'none';
@@ -1226,7 +1419,8 @@ function saveEditModal() {
   const deadline = document.getElementById('modal-deadline-input').value || null;
   const { type, id } = state.editing;
   if (type === 'todo') editTodo(id, title, note, startDate, deadline);
-  else editWatch(id, title, note);
+  else if (type === 'watch') editWatch(id, title, note);
+  else editShopping(id, title, note);
   closeEditModal();
 }
 
@@ -1234,7 +1428,8 @@ function deleteFromEditModal() {
   if (!state.editing) return;
   const { type, id } = state.editing;
   if (type === 'todo') deleteTodo(id);
-  else deleteWatch(id);
+  else if (type === 'watch') deleteWatch(id);
+  else deleteShopping(id);
   closeEditModal();
 }
 
@@ -1246,7 +1441,9 @@ function exportData() {
       exportedAt: new Date().toISOString(),
       todos: state.todos,
       watchItems: state.watchItems,
+      shoppingItems: state.shoppingItems,
       currentCategory: state.currentCategory,
+      currentShoppingCategory: state.currentShoppingCategory,
     };
     const blob = new Blob([JSON.stringify(data,null,2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1269,18 +1466,22 @@ function importData(file) {
       try {
         const data = JSON.parse(e.target.result);
         if (!data.todos || !data.watchItems) { showToast('文件格式不正确'); return; }
-        const existingCount = state.todos.length + state.watchItems.length;
-        const importCount = data.todos.length + data.watchItems.length;
+        const existingCount = state.todos.length + state.watchItems.length + state.shoppingItems.length;
+        const importCount = data.todos.length + data.watchItems.length + (data.shoppingItems ? data.shoppingItems.length : 0);
         if (existingCount > 0 && importCount > 0) {
           if (!confirm(`当前有 ${existingCount} 条数据。导入的备份有 ${importCount} 条数据，将覆盖当前数据。确认导入？`)) return;
         }
         state.todos = (data.todos || []).map(migrateItem);
         state.watchItems = (data.watchItems || []).map(migrateItem);
+        state.shoppingItems = (data.shoppingItems || []).map(migrateItem);
         state.currentCategory = data.currentCategory || 'drama';
+        state.currentShoppingCategory = data.currentShoppingCategory || 'electronics';
         saveState();
         renderWorkspace();
         renderWatchList();
+        renderShoppingList();
         updateWatchProgress();
+        updateShoppingProgress();
         vibrate(30);
         showToast(`已导入 ${importCount} 条数据！`);
       } catch (err) { showToast('文件解析失败，请检查文件格式'); }
@@ -1319,7 +1520,8 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
   document.querySelectorAll('.page').forEach(el => el.classList.toggle('active', el.id === tab + '-page'));
   if (tab === 'todo') renderWorkspace();
-  else updateWatchProgress();
+  else if (tab === 'watch') updateWatchProgress();
+  else updateShoppingProgress();
 }
 
 /* ========== Deadline Input Bar ========== */
@@ -1466,6 +1668,35 @@ function setupEventListeners() {
     if (e.key === 'Enter') { e.preventDefault(); submitWatch(); }
   });
 
+  // ---- Shopping input ----
+  const shoppingInput = document.getElementById('shopping-input');
+  const shoppingAddBtn = document.getElementById('shopping-add-btn');
+
+  shoppingInput.addEventListener('input', () => {
+    shoppingAddBtn.classList.toggle('active', shoppingInput.value.trim().length > 0);
+  });
+
+  function submitShopping() {
+    addShoppingItem(shoppingInput.value);
+    shoppingInput.value = '';
+    shoppingAddBtn.classList.remove('active');
+  }
+
+  let shoppingFired = false;
+  shoppingAddBtn.addEventListener('click', e => {
+    if (shoppingFired) { shoppingFired = false; return; }
+    submitShopping();
+  });
+  shoppingAddBtn.addEventListener('touchend', e => {
+    e.preventDefault();
+    shoppingFired = true;
+    setTimeout(() => shoppingFired = false, 500);
+    submitShopping();
+  });
+  shoppingInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); submitShopping(); }
+  });
+
   // ---- Modal ----
   document.getElementById('edit-cancel-btn').addEventListener('click', closeEditModal);
   document.getElementById('edit-save-btn').addEventListener('click', saveEditModal);
@@ -1485,6 +1716,7 @@ function setupEventListeners() {
   // ---- Settings ----
   document.getElementById('todo-settings-btn').addEventListener('click', toggleSettingsMenu);
   document.getElementById('watch-settings-btn').addEventListener('click', toggleSettingsMenu);
+  document.getElementById('shopping-settings-btn').addEventListener('click', toggleSettingsMenu);
   document.getElementById('export-data-btn').addEventListener('click', () => {
     exportData();
     document.getElementById('settings-menu').classList.remove('show');
@@ -1515,9 +1747,12 @@ function init() {
   loadState();
   document.getElementById('todo-date').textContent = formatDate();
   renderCategoryTabs();
+  renderShoppingCategoryTabs();
   renderWorkspace();
   renderWatchList();
+  renderShoppingList();
   updateWatchProgress();
+  updateShoppingProgress();
   setupEventListeners();
   registerSW();
   syncOnLoad(); // Pull from Gist and start polling

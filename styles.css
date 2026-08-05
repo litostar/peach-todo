@@ -783,6 +783,55 @@ button {
   color: var(--green);
 }
 
+/* Shopping page */
+#shopping-page .list-container {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 0 120px;
+  overscroll-behavior: contain;
+}
+#shopping-page .item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 16px;
+}
+#shopping-page .item-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+#shopping-page .progress-section {
+  padding: 12px 20px 0;
+  flex-shrink: 0;
+}
+#shopping-page .progress-section.compact { padding-top: 10px; }
+#shopping-page .progress-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+#shopping-page .progress-percent {
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* Section label (已看/已买 divider) */
+.section-label {
+  padding: 8px 4px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* ========== Tab Bar ========== */
 .tab-bar {
   display: flex;
