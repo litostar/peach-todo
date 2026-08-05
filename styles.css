@@ -92,7 +92,9 @@ button {
 .page {
   display: none;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   padding-top: var(--safe-top);
 }
 .page.active { display: flex; }
