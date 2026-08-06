@@ -24,8 +24,8 @@ const SHOPPING_CATEGORIES = [
 /* ========== State ========== */
 let state = {
   currentTab: 'todo',
-  currentCategory: 'drama',
-  currentShoppingCategory: 'electronics',
+  currentCategory: null,
+  currentShoppingCategory: null,
   todos: [],
   watchItems: [],
   shoppingItems: [],
@@ -291,8 +291,8 @@ function loadState() {
       state.todos = (data.todos || []).map(migrateItem);
       state.watchItems = (data.watchItems || []).map(migrateItem);
       state.shoppingItems = (data.shoppingItems || []).map(migrateItem);
-      state.currentCategory = data.currentCategory || 'drama';
-      state.currentShoppingCategory = data.currentShoppingCategory || 'electronics';
+      state.currentCategory = data.currentCategory || null;
+      state.currentShoppingCategory = data.currentShoppingCategory || null;
     } else {
       const today = isoToday();
       const tomorrow = addDays(today, 1);
@@ -567,25 +567,22 @@ function reorderTodos(fromId, toId) {
 
 /* ========== Watch Operations ========== */
 function getWatchItems() {
+  if (!state.currentCategory) return [...state.watchItems];
   return state.watchItems.filter(x => x.category === state.currentCategory);
 }
 
-function addWatchItem(title) {
+function addWatchItem(title, category) {
   const t = title.trim();
   if (!t) return;
   clearUndo();
+  const cat = category || state.currentCategory || CATEGORIES[0].id;
   const item = {
-    id: uid(), title: t, category: state.currentCategory,
+    id: uid(), title: t, category: cat,
     note: '', isCompleted: false, isPinned: false,
     order: 0, createdAt: Date.now(),
   };
-  // Get all items in current category and prepend the new one
-  const catItems = state.watchItems.filter(x => x.category === state.currentCategory);
-  catItems.unshift(item);
-  catItems.forEach((x, i) => x.order = i);
-  // Keep items of other categories, rebuild state.watchItems
-  const otherItems = state.watchItems.filter(x => x.category !== state.currentCategory);
-  state.watchItems = [...catItems, ...otherItems];
+  state.watchItems.unshift(item);
+  state.watchItems.forEach((x, i) => x.order = i);
   newItemIds.add(item.id);
   saveState();
   renderWatchList();
@@ -637,49 +634,42 @@ function editWatch(id, title, note) {
 }
 
 function resortWatchItems() {
-  const cat = state.currentCategory;
-  const items = state.watchItems.filter(x => x.category === cat);
+  const items = [...state.watchItems];
   const pinned = items.filter(x => x.isPinned && !x.isCompleted);
   const incomplete = items.filter(x => !x.isPinned && !x.isCompleted);
   const pinnedDone = items.filter(x => x.isPinned && x.isCompleted);
   const completed = items.filter(x => !x.isPinned && x.isCompleted);
-  const reordered = [...pinned, ...incomplete, ...pinnedDone, ...completed];
-  const others = state.watchItems.filter(x => x.category !== cat);
-  state.watchItems = [...others, ...reordered];
+  state.watchItems = [...pinned, ...incomplete, ...pinnedDone, ...completed];
 }
 
 function reorderWatch(fromId, toId) {
-  const items = getWatchItems();
-  const fromIdx = items.findIndex(x => x.id === fromId);
-  const toIdx = items.findIndex(x => x.id === toId);
+  const fromIdx = state.watchItems.findIndex(x => x.id === fromId);
+  const toIdx = state.watchItems.findIndex(x => x.id === toId);
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
-  const [moved] = items.splice(fromIdx, 1);
-  items.splice(toIdx, 0, moved);
-  const others = state.watchItems.filter(x => x.category !== state.currentCategory);
-  state.watchItems = [...others, ...items];
+  const [moved] = state.watchItems.splice(fromIdx, 1);
+  state.watchItems.splice(toIdx, 0, moved);
   saveState();
   renderWatchList();
 }
 
 /* ========== Shopping Operations ========== */
 function getShoppingItems() {
+  if (!state.currentShoppingCategory) return [...state.shoppingItems];
   return state.shoppingItems.filter(x => x.category === state.currentShoppingCategory);
 }
 
-function addShoppingItem(title) {
+function addShoppingItem(title, category) {
   const t = title.trim();
   if (!t) return;
   clearUndo();
+  const cat = category || state.currentShoppingCategory || SHOPPING_CATEGORIES[0].id;
   const item = {
-    id: uid(), title: t, category: state.currentShoppingCategory,
+    id: uid(), title: t, category: cat,
     note: '', isCompleted: false, isPinned: false,
     order: 0, createdAt: Date.now(),
   };
-  const catItems = state.shoppingItems.filter(x => x.category === state.currentShoppingCategory);
-  catItems.unshift(item);
-  catItems.forEach((x, i) => x.order = i);
-  const otherItems = state.shoppingItems.filter(x => x.category !== state.currentShoppingCategory);
-  state.shoppingItems = [...catItems, ...otherItems];
+  state.shoppingItems.unshift(item);
+  state.shoppingItems.forEach((x, i) => x.order = i);
   newItemIds.add(item.id);
   saveState();
   renderShoppingList();
@@ -731,26 +721,20 @@ function editShopping(id, title, note) {
 }
 
 function resortShoppingItems() {
-  const cat = state.currentShoppingCategory;
-  const items = state.shoppingItems.filter(x => x.category === cat);
+  const items = [...state.shoppingItems];
   const pinned = items.filter(x => x.isPinned && !x.isCompleted);
   const incomplete = items.filter(x => !x.isPinned && !x.isCompleted);
   const pinnedDone = items.filter(x => x.isPinned && x.isCompleted);
   const completed = items.filter(x => !x.isPinned && x.isCompleted);
-  const reordered = [...pinned, ...incomplete, ...pinnedDone, ...completed];
-  const others = state.shoppingItems.filter(x => x.category !== cat);
-  state.shoppingItems = [...others, ...reordered];
+  state.shoppingItems = [...pinned, ...incomplete, ...pinnedDone, ...completed];
 }
 
 function reorderShopping(fromId, toId) {
-  const items = getShoppingItems();
-  const fromIdx = items.findIndex(x => x.id === fromId);
-  const toIdx = items.findIndex(x => x.id === toId);
+  const fromIdx = state.shoppingItems.findIndex(x => x.id === fromId);
+  const toIdx = state.shoppingItems.findIndex(x => x.id === toId);
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
-  const [moved] = items.splice(fromIdx, 1);
-  items.splice(toIdx, 0, moved);
-  const others = state.shoppingItems.filter(x => x.category !== state.currentShoppingCategory);
-  state.shoppingItems = [...others, ...items];
+  const [moved] = state.shoppingItems.splice(fromIdx, 1);
+  state.shoppingItems.splice(toIdx, 0, moved);
   saveState();
   renderShoppingList();
 }
@@ -816,7 +800,7 @@ function updateProgress() {
 }
 
 function updateWatchProgress() {
-  const items = getWatchItems();
+  const items = state.watchItems;
   const total = items.length;
   const done = items.filter(x => x.isCompleted).length;
   const pct = total > 0 ? Math.round((done/total)*100) : 0;
@@ -826,7 +810,7 @@ function updateWatchProgress() {
 }
 
 function updateShoppingProgress() {
-  const items = getShoppingItems();
+  const items = state.shoppingItems;
   const total = items.length;
   const done = items.filter(x => x.isCompleted).length;
   const pct = total > 0 ? Math.round((done/total)*100) : 0;
@@ -973,10 +957,25 @@ function renderGantt() {
 function renderCategoryTabs() {
   const container = document.getElementById('category-tabs');
   container.innerHTML = '';
+
+  // "全部" chip
+  const allBtn = document.createElement('button');
+  allBtn.className = 'cat-tab' + (!state.currentCategory ? ' active' : '');
+  allBtn.innerHTML = `<span>全部</span><span class="cat-count">${state.watchItems.length}</span>`;
+  allBtn.addEventListener('click', () => {
+    state.currentCategory = null;
+    saveState();
+    renderCategoryTabs();
+    renderWatchList();
+    updateWatchProgress();
+  });
+  container.appendChild(allBtn);
+
   CATEGORIES.forEach(cat => {
+    const count = state.watchItems.filter(x => x.category === cat.id).length;
     const btn = document.createElement('button');
     btn.className = 'cat-tab' + (cat.id === state.currentCategory ? ' active' : '');
-    btn.innerHTML = `<span class="cat-emoji">${cat.emoji}</span><span>${cat.name}</span>`;
+    btn.innerHTML = `<span>${cat.emoji} ${cat.name}</span><span class="cat-count">${count}</span>`;
     btn.addEventListener('click', () => {
       state.currentCategory = cat.id;
       saveState();
@@ -988,15 +987,53 @@ function renderCategoryTabs() {
   });
 }
 
-/* ========== Rendering: Watch List ========== */
+/* ========== Category Selectors in Input Bar ========== */
+let watchInputCat = CATEGORIES[0].id;
+let shoppingInputCat = SHOPPING_CATEGORIES[0].id;
+
+function renderWatchCatSelector() {
+  const container = document.getElementById('watch-cat-selector');
+  if (!container) return;
+  container.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const chip = document.createElement('button');
+    chip.className = 'cat-chip' + (cat.id === watchInputCat ? ' active' : '');
+    chip.textContent = cat.emoji;
+    chip.title = cat.name;
+    chip.addEventListener('click', () => {
+      watchInputCat = cat.id;
+      renderWatchCatSelector();
+    });
+    container.appendChild(chip);
+  });
+}
+
+function renderShoppingCatSelector() {
+  const container = document.getElementById('shopping-cat-selector');
+  if (!container) return;
+  container.innerHTML = '';
+  SHOPPING_CATEGORIES.forEach(cat => {
+    const chip = document.createElement('button');
+    chip.className = 'cat-chip' + (cat.id === shoppingInputCat ? ' active' : '');
+    chip.textContent = cat.emoji;
+    chip.title = cat.name;
+    chip.addEventListener('click', () => {
+      shoppingInputCat = cat.id;
+      renderShoppingCatSelector();
+    });
+    container.appendChild(chip);
+  });
+}
 function renderWatchList() {
   const list = document.getElementById('watch-list');
   list.innerHTML = '';
 
   const items = getWatchItems();
   if (items.length === 0) {
-    const cat = CATEGORIES.find(c => c.id === state.currentCategory);
-    list.innerHTML = `<div class="empty-state"><div class="empty-emoji">${cat?cat.emoji:'🍑'}</div><div class="empty-text">还没有${cat?cat.name:''}，添加一个吧！</div></div>`;
+    const label = state.currentCategory
+      ? (CATEGORIES.find(c => c.id === state.currentCategory) || {}).name || ''
+      : '';
+    list.innerHTML = `<div class="empty-state"><div class="empty-emoji">👀</div><div class="empty-text">${label ? '还没有' + label + '，' : '还没有项目，'}添加一个吧！</div></div>`;
     return;
   }
 
@@ -1017,10 +1054,25 @@ function renderWatchList() {
 function renderShoppingCategoryTabs() {
   const container = document.getElementById('shopping-category-tabs');
   container.innerHTML = '';
+
+  // "全部" chip
+  const allBtn = document.createElement('button');
+  allBtn.className = 'cat-tab' + (!state.currentShoppingCategory ? ' active' : '');
+  allBtn.innerHTML = `<span>全部</span><span class="cat-count">${state.shoppingItems.length}</span>`;
+  allBtn.addEventListener('click', () => {
+    state.currentShoppingCategory = null;
+    saveState();
+    renderShoppingCategoryTabs();
+    renderShoppingList();
+    updateShoppingProgress();
+  });
+  container.appendChild(allBtn);
+
   SHOPPING_CATEGORIES.forEach(cat => {
+    const count = state.shoppingItems.filter(x => x.category === cat.id).length;
     const btn = document.createElement('button');
     btn.className = 'cat-tab' + (cat.id === state.currentShoppingCategory ? ' active' : '');
-    btn.innerHTML = `<span class="cat-emoji">${cat.emoji}</span><span>${cat.name}</span>`;
+    btn.innerHTML = `<span>${cat.emoji} ${cat.name}</span><span class="cat-count">${count}</span>`;
     btn.addEventListener('click', () => {
       state.currentShoppingCategory = cat.id;
       saveState();
@@ -1039,8 +1091,10 @@ function renderShoppingList() {
 
   const items = getShoppingItems();
   if (items.length === 0) {
-    const cat = SHOPPING_CATEGORIES.find(c => c.id === state.currentShoppingCategory);
-    list.innerHTML = `<div class="empty-state"><div class="empty-emoji">${cat?cat.emoji:'🛒'}</div><div class="empty-text">还没有${cat?cat.name:''}，添加一个吧！</div></div>`;
+    const label = state.currentShoppingCategory
+      ? (SHOPPING_CATEGORIES.find(c => c.id === state.currentShoppingCategory) || {}).name || ''
+      : '';
+    list.innerHTML = `<div class="empty-state"><div class="empty-emoji">🛒</div><div class="empty-text">${label ? '还没有' + label + '，' : '还没有项目，'}添加一个吧！</div></div>`;
     return;
   }
 
@@ -1139,6 +1193,18 @@ function createItemCard(item, type) {
   titleEl.className = 'item-title';
   titleEl.textContent = item.title;
   content.appendChild(titleEl);
+
+  // Category tag (watch/shopping in "全部" mode)
+  if ((type === 'watch' && !state.currentCategory) || (type === 'shopping' && !state.currentShoppingCategory)) {
+    const cats = type === 'watch' ? CATEGORIES : SHOPPING_CATEGORIES;
+    const cat = cats.find(c => c.id === item.category);
+    if (cat) {
+      const tag = document.createElement('span');
+      tag.className = 'item-cat-tag';
+      tag.textContent = cat.emoji + ' ' + cat.name;
+      content.appendChild(tag);
+    }
+  }
 
   // Deadline badge (todo only)
   if (type === 'todo' && (item.startDate || item.deadline)) {
@@ -1338,21 +1404,21 @@ function setupDragReorder(wrapper, card, handle, type) {
       });
       if (newOrder.length > 0) state.todos = newOrder;
     } else if (type === 'watch') {
-      const catItems = [];
+      const newOrder = [];
       allWrappers.forEach(w => {
         const it = state.watchItems.find(x => x.id === w.dataset.id);
-        if (it) catItems.push(it);
+        if (it) newOrder.push(it);
       });
-      const others = state.watchItems.filter(x => x.category !== state.currentCategory);
-      state.watchItems = [...others, ...catItems];
+      const others = state.watchItems.filter(x => !newOrder.find(o => o.id === x.id));
+      state.watchItems = [...newOrder, ...others];
     } else {
-      const catItems = [];
+      const newOrder = [];
       allWrappers.forEach(w => {
         const it = state.shoppingItems.find(x => x.id === w.dataset.id);
-        if (it) catItems.push(it);
+        if (it) newOrder.push(it);
       });
-      const others = state.shoppingItems.filter(x => x.category !== state.currentShoppingCategory);
-      state.shoppingItems = [...others, ...catItems];
+      const others = state.shoppingItems.filter(x => !newOrder.find(o => o.id === x.id));
+      state.shoppingItems = [...newOrder, ...others];
     }
     saveState();
     vibrate(15);
@@ -1474,8 +1540,8 @@ function importData(file) {
         state.todos = (data.todos || []).map(migrateItem);
         state.watchItems = (data.watchItems || []).map(migrateItem);
         state.shoppingItems = (data.shoppingItems || []).map(migrateItem);
-        state.currentCategory = data.currentCategory || 'drama';
-        state.currentShoppingCategory = data.currentShoppingCategory || 'electronics';
+        state.currentCategory = data.currentCategory || null;
+        state.currentShoppingCategory = data.currentShoppingCategory || null;
         saveState();
         renderWorkspace();
         renderWatchList();
@@ -1648,7 +1714,7 @@ function setupEventListeners() {
   });
 
   function submitWatch() {
-    addWatchItem(watchInput.value);
+    addWatchItem(watchInput.value, watchInputCat);
     watchInput.value = '';
     watchAddBtn.classList.remove('active');
   }
@@ -1677,7 +1743,7 @@ function setupEventListeners() {
   });
 
   function submitShopping() {
-    addShoppingItem(shoppingInput.value);
+    addShoppingItem(shoppingInput.value, shoppingInputCat);
     shoppingInput.value = '';
     shoppingAddBtn.classList.remove('active');
   }
@@ -1748,6 +1814,8 @@ function init() {
   document.getElementById('todo-date').textContent = formatDate();
   renderCategoryTabs();
   renderShoppingCategoryTabs();
+  renderWatchCatSelector();
+  renderShoppingCatSelector();
   renderWorkspace();
   renderWatchList();
   renderShoppingList();
