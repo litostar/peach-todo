@@ -138,7 +138,7 @@ function saveUndo(action, type, item, items) {
   clearUndo();
   undoAction = { action, type, item: { ...item }, itemsBackup: JSON.parse(JSON.stringify(items)) };
   showUndoToast(action, type);
-  undoTimer = setTimeout(() => dismissUndo(), 3500);
+  undoTimer = setTimeout(() => clearUndo(), 3500);
 }
 
 function clearUndo() {
