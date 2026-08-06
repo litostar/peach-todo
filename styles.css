@@ -771,9 +771,10 @@ button {
 /* Category selector chips in input bar */
 .cat-selector {
   display: flex;
-  gap: 6px;
-  padding: 0 0 8px 0;
+  gap: 8px;
+  padding: 0 16px 8px;
   flex-wrap: wrap;
+  justify-content: flex-start;
 }
 .cat-chip {
   width: 34px;
